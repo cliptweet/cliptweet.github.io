@@ -12,6 +12,7 @@ const profileStatus = document.getElementById('profileStatus');
 const profilePreview = document.getElementById('profilePreview');
 const profileAvatar = document.getElementById('profileAvatar');
 const profilePreviewName = document.getElementById('profilePreviewName');
+const personalizeBox = document.getElementById('personalizeBox');
 let generating = false;
 let objectUrl;
 const layoutInputs = Array.from(document.querySelectorAll('input[name="version"]'));
@@ -30,6 +31,12 @@ const profileCache = new Map();
 let profilePending = null;   // { handle, promise }
 let profileController = null;
 let debounceId = 0;
+function syncLayout() {
+  const standard = layoutInputs.find(radio => radio.checked)?.value !== 'reel';
+  personalizeBox.hidden = !standard;
+}
+layoutInputs.forEach(radio => radio.addEventListener('change', syncLayout));
+syncLayout();
 
 const PROFILE_WAIT_MS = 8000;
 
@@ -172,8 +179,8 @@ function setBusy(value) {
 
 generateBtn.addEventListener('click', async () => {
   if (generating) return;
-  const url = input.value.trim();
-  if (!url) { statusDiv.textContent = 'Paste a valid X/Twitter post URL.'; return; }
+  const sourcePostUrl = input.value.trim();
+  if (!sourcePostUrl) { statusDiv.textContent = 'Paste a valid X/Twitter post URL.'; return; }
   setBusy(true);
   previewContainer.classList.remove('active');
   const controller = new AbortController();
@@ -183,7 +190,8 @@ generateBtn.addEventListener('click', async () => {
     // A resolve still in flight gets a short grace period; after that the clip
     // is generated without the identity block rather than being blocked.
     const typedName = displayNameInput.value.trim();
-    if (profileUrlInput.value.trim() && typedName) {
+    const standard = layoutInputs.find(radio => radio.checked)?.value !== 'reel';
+    if (standard && profileUrlInput.value.trim() && typedName) {
       const settled = await Promise.race([
         runProfileResolve(),
         new Promise(resolve => setTimeout(() => resolve({ timeout: true }), PROFILE_WAIT_MS)),
@@ -198,9 +206,9 @@ generateBtn.addEventListener('click', async () => {
       }
     }
     const { generateClip, normalizeTweetUrl } = await import('./clip.js');
-    try { normalizeTweetUrl(url); } catch (error) { statusDiv.textContent = error.message; return; }
+    try { normalizeTweetUrl(sourcePostUrl); } catch (error) { statusDiv.textContent = error.message; return; }
     const version = layoutInputs.find(radio => radio.checked)?.value || 'standard';
-    const result = await generateClip({ url, version, identity, signal: controller.signal, onProgress: message => { statusDiv.textContent = message; } });
+    const result = await generateClip({ url: sourcePostUrl, version, identity: standard ? identity : null, signal: controller.signal, onProgress: message => { statusDiv.textContent = message; } });
     if (objectUrl) URL.revokeObjectURL(objectUrl);
     objectUrl = URL.createObjectURL(result.blob);
     previewVideo.src = objectUrl;

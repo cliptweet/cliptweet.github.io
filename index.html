@@ -86,6 +86,11 @@
     @media (min-width: 1201px) { .ad-slot { display: block; } }
 
     .input-hint { font-size: 0.8rem; color: #8899a6; margin: 0.45rem 0 0; line-height: 1.35; }
+    .version-group { border: 0; padding: 0; margin: 1.25rem 0 0; }
+    .version-group legend { color: #8899a6; font-size: .85rem; margin-bottom: .55rem; }
+    .version-group label { display: block; padding: .65rem .75rem; margin: .45rem 0; border: 1px solid #253341; border-radius: 10px; color: #fff; line-height: 1.25; }
+    .version-group label input { margin-right: .55rem; vertical-align: middle; accent-color: #1d9bf0; }
+    .version-group small { display: block; margin: .25rem 0 0 1.55rem; color: #8899a6; line-height: 1.35; }
     .personalize { border: 1px solid #253341; border-radius: 12px; padding: 0.85rem 0.9rem 0.9rem; margin: 1rem 0 0; }
     .personalize__legend { font-size: 0.8rem; color: #8899a6; padding: 0 0.35rem; }
     .personalize__row { display: flex; gap: 0.75rem; }
@@ -142,9 +147,9 @@
       <legend class="personalize__legend">Personalize your clip (optional)</legend>
       <div class="personalize__row">
         <div class="personalize__field">
-          <label for="profileUrl">Your X post</label>
-          <input type="text" inputmode="url" id="profileUrl" placeholder="https://x.com/you/status/..." autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="profileHint" aria-invalid="false">
-          <p class="personalize__hint" id="profileHint">Use any of your posts &mdash; we only use it to get your profile picture.</p>
+          <label for="profileUrl">Profile picture source</label>
+          <input type="text" inputmode="url" id="profileUrl" placeholder="https://x.com/account/status/..." autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="profileHint" aria-invalid="false">
+          <p class="personalize__hint" id="profileHint">Paste any post from the X account whose profile picture you want to use.</p>
         </div>
         <div class="personalize__field">
           <label for="displayName">Display name</label>
