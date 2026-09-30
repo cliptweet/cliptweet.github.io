@@ -14,6 +14,8 @@
   <meta property="og:url" content="https://cliptweet.github.io/">
   <meta property="og:site_name" content="ClipTweet">
   <meta name="twitter:card" content="summary">
+  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1549712380501865"
+     crossorigin="anonymous"></script>
   <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"ClipTweet","url":"https://cliptweet.github.io/","applicationCategory":"MultimediaApplication","operatingSystem":"Web browser","isAccessibleForFree":true,"description":"Create downloadable MP4 clips combining an X/Twitter post's text and video, processed in your browser."}</script>
   <style>
     * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
@@ -84,6 +86,7 @@
 
     /* Passive display slots; never involved in generation or downloads. */
     .ad-slot { position: fixed; top: 50%; transform: translateY(-50%); width: 160px; height: 600px; z-index: 1; pointer-events: none; }
+    .ad-slot[hidden] { display: none; }
     .ad-slot--left { left: 12px; }
     .ad-slot--right { right: 12px; }
     .ad-slot__inner { border: 1px dashed rgba(255,255,255,0.15); background: rgba(21,32,43,0.4); display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; border-radius: 8px; }
@@ -110,12 +113,8 @@
 </head>
 <body>
   <div id="appContent" style="display:contents">
-  <aside class="ad-slot ad-slot--left" aria-label="Advertising space">
-    <div class="ad-slot__inner"><span class="ad-slot__label">Ad space</span></div>
-  </aside>
-  <aside class="ad-slot ad-slot--right" aria-label="Advertising space">
-    <div class="ad-slot__inner"><span class="ad-slot__label">Ad space</span></div>
-  </aside>
+  <aside class="ad-slot ad-slot--left" aria-label="Advertising space" hidden></aside>
+  <aside class="ad-slot ad-slot--right" aria-label="Advertising space" hidden></aside>
   <main>
   <div class="card">
     <h1>ClipTweet — X / Twitter Video Downloader</h1>
@@ -156,6 +155,7 @@
     <h2 id="privacy">Privacy</h2>
     <p>ClipTweet sends the post link to its Cloudflare Worker to retrieve public metadata from X. Your browser contacts X's video CDN and jsDelivr for the video-processing library. These providers receive connection information such as your IP address. Generated videos remain on your device; ClipTweet does not upload or store them.</p>
     <p>Cloudflare processes resolver requests and may retain operational logs. Generated videos remain on your device.</p>
+    <p>ClipTweet loads Google AdSense for advertising. Third-party vendors, including Google, may use cookies to serve ads based on prior visits to this or other websites. Google's advertising cookies allow Google and its partners to serve ads based on those visits. Other advertising partners may also use cookies or similar technologies. You can manage personalized advertising in <a href="https://myadcenter.google.com/" rel="noopener noreferrer">Google My Ad Center</a> or opt out of participating third-party vendors through <a href="https://www.aboutads.info/choices/" rel="noopener noreferrer">YourAdChoices</a>. See <a href="https://business.safety.google/privacy/" rel="noopener noreferrer">how Google uses data</a>. This optional advertising notice is not a consent form.</p>
   </section>
   </main>
   <footer><a href="#terms">Terms</a> · <a href="#privacy">Privacy</a> · ClipTweet is not affiliated with X / Twitter.</footer>
