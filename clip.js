@@ -325,7 +325,7 @@ export async function generateClip({ url, identity, version = 'standard', onProg
       : 0;
     // The total height must stay even for H.264/yuv420.
     const bannerH = isReel ? 0 : ((rawBannerH & ~1) || 2);
-    const totalH = bannerH + outH;
+    let totalH = bannerH + outH;
     const reelStep = reelFontPx * 1.2;
     const reelStartY = Math.max(reelStep / 2, Math.min(outH * 5 / 6 - (lines.length - 1) * reelStep / 2, outH - (lines.length - 0.5) * reelStep));
     const reelStrokeWidth = Math.max(2, reelFontPx * 0.14);
@@ -377,6 +377,45 @@ export async function generateClip({ url, identity, version = 'standard', onProg
     // The bitmap is only needed to build the pre-rendered circle.
     identityBlock?.bitmap.close?.();
 
+    // Standard's media viewport keeps the source ratio. Only its card adds
+    // space; the existing text geometry and output width stay unchanged.
+    let card = null;
+    if (!isReel) {
+      try {
+        const padding = Math.max(4, Math.round(outW * 0.018));
+        const mediaW = outW - padding * 2;
+        const mediaH = Math.max(2, Math.round(mediaW * srcH / srcW) & ~1);
+        const radius = Math.min(mediaW / 2, mediaH / 2, Math.max(10, Math.round(outW * 0.025)));
+        const gap = Math.max(3, Math.round(outW * 0.006));
+        let signaturePx = Math.max(9, Math.round(outW * 0.014));
+        const signature = 'Made with ClipTweet · cliptweet.github.io';
+        measurer.font = `400 ${signaturePx}px ${BANNER_FONT_FAMILY}`;
+        while (signaturePx > 7 && measurer.measureText(signature).width > mediaW) {
+          signaturePx--;
+          measurer.font = `400 ${signaturePx}px ${BANNER_FONT_FAMILY}`;
+        }
+        const cardH = (Math.ceil(padding + mediaH + gap + signaturePx * 1.35 + padding) + 1) & ~1;
+        const decoration = document.createElement('canvas');
+        decoration.width = outW * TEXT_SCALE;
+        decoration.height = cardH * TEXT_SCALE;
+        const ctx = decoration.getContext('2d');
+        ctx.scale(TEXT_SCALE, TEXT_SCALE);
+        ctx.fillStyle = '#20303e';
+        ctx.fillRect(0, 0, outW, cardH);
+        ctx.font = measurer.font;
+        ctx.textBaseline = 'top';
+        ctx.fillStyle = '#b1bdc8';
+        ctx.fillText(signature, padding, padding + mediaH + gap);
+        const mask = new Path2D();
+        mask.roundRect(padding, bannerH + padding, mediaW, mediaH, radius);
+        card = { decoration, mask, x: padding, y: bannerH + padding, width: mediaW, height: mediaH, cardH };
+        totalH = bannerH + cardH;
+      } catch (error) {
+        // Card-only fallback: media fitting below still uses cover, never contain.
+        console.warn('clip: Standard card unavailable; using the previous layout.', error);
+      }
+    }
+
     const frame = document.createElement('canvas');
     frame.width = outW; frame.height = totalH;
     const fctx = frame.getContext('2d', { alpha: false });
@@ -409,10 +448,30 @@ export async function generateClip({ url, identity, version = 'standard', onProg
           // output size, so any automatic resize stage would rescale the banner.
           quality: new Quality({ bitrate: Math.round(videoKbps * 1000) }),
           process: (sample) => {
+            const viewport = card || { x: 0, y: isReel ? 0 : bannerH, width: outW, height: outH };
+            if (card) fctx.drawImage(card.decoration, 0, bannerH, outW, card.cardH);
+            fctx.save();
+            try {
+              if (card) fctx.clip(card.mask);
+              else {
+                fctx.beginPath();
+                fctx.rect(viewport.x, viewport.y, viewport.width, viewport.height);
+                fctx.clip();
+              }
+              // Uniform scale + centred excess: fills the viewport without
+              // stretching, including rounding differences and rotated samples.
+              const mediaAspect = sample.displayWidth / sample.displayHeight;
+              const viewportAspect = viewport.width / viewport.height;
+              if (Math.abs(mediaAspect - viewportAspect) < 1e-9) {
+                sample.draw(fctx, viewport.x, viewport.y, viewport.width, viewport.height);
+              } else {
+                const cover = Math.max(viewport.width / sample.displayWidth, viewport.height / sample.displayHeight);
+                const width = sample.displayWidth * cover, height = sample.displayHeight * cover;
+                sample.draw(fctx, viewport.x + (viewport.width - width) / 2, viewport.y + (viewport.height - height) / 2, width, height);
+              }
+            } finally { fctx.restore(); }
+            // Graphics are composited at final resolution after media fitting.
             if (!isReel && bannerH) fctx.drawImage(banner, 0, 0, outW, bannerH);
-            // Explicit size: the video is scaled to the final frame, so the
-            // banner above is never resampled and the text stays crisp.
-            sample.draw(fctx, 0, isReel ? 0 : bannerH, outW, outH);
             if (isReel && lines.length) fctx.drawImage(banner, 0, reelTop, outW, reelLayerH);
             return frame;
           },
