@@ -62,20 +62,12 @@ function hideProfilePreview() {
   profileAvatar.removeAttribute('src');
 }
 
-// A post link is the only accepted input; the display name is never sent.
-// Returns the author handle plus the status id, which the resolver accepts in
-// its canonical /i/status/<id> form.
-function extractProfilePost(raw) {
+function extractProfileUsername(raw) {
   const value = String(raw || '').trim();
   if (!value) return null;
-  const withScheme = /^https?:\/\//i.test(value) ? value : `https://${value}`;
-  let u;
-  try { u = new URL(withScheme); } catch { throw new Error('Invalid profile'); }
-  if (u.protocol !== 'https:') throw new Error('Invalid profile');
-  if (!/^(www\.|mobile\.)?(x|twitter)\.com$/i.test(u.hostname)) throw new Error('Invalid profile');
-  const m = u.pathname.match(/^\/([A-Za-z0-9_]{1,15})\/status\/(\d{5,25})\/?$/);
-  if (!m) throw new Error('Invalid profile');
-  return { handle: m[1], statusId: m[2] };
+  const bare = value.replace(/^@/, '').replace(/^https?:\/\/(?:www\.|mobile\.)?(?:x|twitter)\.com\//i, '').split(/[/?#]/)[0];
+  if (!/^[A-Za-z0-9_]{1,15}$/.test(bare)) throw new Error('Invalid profile username');
+  return bare;
 }
 
 function clearProfile() {
@@ -88,30 +80,22 @@ function clearProfile() {
 }
 
 async function resolveProfile(raw) {
-  let post;
-  try { post = extractProfilePost(raw); }
-  catch { return { error: 'Invalid profile' }; }
-  if (!post) return { empty: true };
-  if (profileCache.has(post.handle)) return { ...profileCache.get(post.handle), handle: post.handle };
-
-  // Only the newest request may write state.
+  let handle;
+  try { handle = extractProfileUsername(raw); }
+  catch (error) { return { error: error.message }; }
+  if (!handle) return { empty: true };
+  if (profileCache.has(handle)) return { ...profileCache.get(handle), handle };
   profileController?.abort();
   const controller = new AbortController();
   profileController = controller;
   setProfileStatus('Loading profile…');
   const apiBase = String(globalThis.CLIPTWEET_API_BASE || '').replace(/\/$/, '');
   try {
-    const res = await fetch(`${apiBase}/api/profile`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ url: `https://x.com/i/status/${post.statusId}` }),
-      signal: controller.signal,
-    });
-    const data = await res.json().catch(() => ({}));
-    if (controller.signal.aborted) return { empty: true };
-    if (!res.ok) return { error: data.error || 'Could not load the profile.' };
-    const entry = { handle: data.handle || post.handle, avatar: data.avatar || null };
-    profileCache.set(post.handle, entry);
+    const avatar = `https://unavatar.io/twitter/${encodeURIComponent(handle)}`;
+    const probe = await fetch(avatar, { method: 'HEAD', signal: controller.signal });
+    if (!probe.ok) return { error: "Couldn't load that profile picture." };
+    const entry = { handle, avatar };
+    profileCache.set(handle, entry);
     return entry;
   } catch (error) {
     if (error.name === 'AbortError') return { empty: true };

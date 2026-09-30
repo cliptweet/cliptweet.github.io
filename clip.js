@@ -183,7 +183,7 @@ function sanitizeDisplayName(value) {
   return Array.from(text).slice(0, 30).join('');
 }
 async function buildIdentityBlock(dataUrl, name, fontPx, maxWidth) {
-  if (!/^data:image\/(?:png|jpeg|webp);base64,/i.test(String(dataUrl || ''))) return null;
+  if (!/^data:image\/(?:png|jpeg|webp);base64,/i.test(String(dataUrl || '')) && !/^https:\/\//i.test(String(dataUrl || ''))) return null;
   const response = await fetch(dataUrl);
   const bitmap = await createImageBitmap(await response.blob());
   const diameter = Math.min(Math.round(fontPx * 2.25), bitmap.width, bitmap.height);
