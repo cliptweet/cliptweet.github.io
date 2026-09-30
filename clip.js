@@ -185,7 +185,7 @@ export async function generateClip({ url, version = 'standard', onProgress, sign
     let reelFontPx = Math.max(14, Math.round(outW * 0.05));
     if (isReel) {
       for (;;) {
-        measurer.font = `400 ${reelFontPx}px ${BANNER_FONT_FAMILY}`;
+        measurer.font = `800 ${reelFontPx}px ${BANNER_FONT_FAMILY}`;
         lines = bannerText ? layoutLines(measurer, bannerText, outW * 0.9) : [];
         if (reelFontPx <= 14 || lines.length * reelFontPx * 1.2 <= outH / 6) break;
         reelFontPx--;
@@ -210,12 +210,12 @@ export async function generateClip({ url, version = 'standard', onProgress, sign
     bctx.shadowBlur = Math.max(1, fontPx / 10);
     bctx.shadowOffsetY = Math.max(1, Math.round(fontPx / 24));
     if (isReel) {
-      bctx.font = `400 ${reelFontPx}px ${BANNER_FONT_FAMILY}`;
+      bctx.font = `800 ${reelFontPx}px ${BANNER_FONT_FAMILY}`;
       bctx.textBaseline = 'middle';
       bctx.shadowColor = 'transparent';
       bctx.strokeStyle = '#000';
       bctx.lineJoin = 'round';
-      bctx.lineWidth = Math.max(2, reelFontPx * 0.08);
+      bctx.lineWidth = Math.max(2, reelFontPx * 0.14);
       const step = reelFontPx * 1.2;
       const startY = Math.max(step / 2, Math.min(outH * 5 / 6 - (lines.length - 1) * step / 2, outH - (lines.length - 0.5) * step));
       lines.forEach((line, i) => {
