@@ -74,55 +74,15 @@
     .download-section { margin-top: 1.25rem; display: flex; justify-content: center; }
     .download-btn { width: auto; min-width: 220px; padding: 0.8rem 1.5rem; font-size: 0.95rem; }
 
-    .input-hint { font-size: 0.8rem; color: #8899a6; margin: 0.45rem 0 0; line-height: 1.35; }
-    .ad-placeholder-box p { margin: 0; color: #8899a6; font-size: 0.9rem; }
-    .ad-placeholder-close {
-      margin-top: 1rem; background: #1d9bf0; color: #fff; border: none;
-      border-radius: 9999px; padding: 0.6rem 1.5rem; font-weight: bold; cursor: pointer;
-    }
-
-    /* Reserved ad spaces (AdSense) */
-    .ad-slot {
-      position: fixed;
-      top: 50%;
-      transform: translateY(-50%);
-      width: 160px;
-      height: 600px;
-      z-index: 1;
-      pointer-events: none;
-    }
+    /* Passive display slots; never involved in generation or downloads. */
+    .ad-slot { position: fixed; top: 50%; transform: translateY(-50%); width: 160px; height: 600px; z-index: 1; pointer-events: none; }
     .ad-slot--left { left: 12px; }
     .ad-slot--right { right: 12px; }
-    .ad-slot__inner {
-      border: 1px dashed rgba(255, 255, 255, 0.15);
-      background: rgba(21, 32, 43, 0.4);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: 100%;
-      height: 100%;
-      border-radius: 8px;
-    }
-    .ad-slot__label {
-      font-size: 11px;
-      color: rgba(255, 255, 255, 0.25);
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
+    .ad-slot__inner { border: 1px dashed rgba(255,255,255,0.15); background: rgba(21,32,43,0.4); display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; border-radius: 8px; }
+    .ad-slot__label { font-size: 11px; color: rgba(255,255,255,0.25); text-transform: uppercase; letter-spacing: 0.5px; }
+    @media (max-width: 1200px) { .ad-slot { display: none; } }
 
-    @media (max-width: 1200px) {
-      .ad-slot { display: none; }
-    }
-
-    /* Cookie & advertising policy modal */
-    .policy-overlay {
-      display: none; max-width: 480px; margin: 0 auto 1rem;
-    }
-    .policy-overlay.active { display: flex; }
-    .policy-modal {
-      background: #192734; border-radius: 12px;
-      width: 100%; padding: 1rem;
-    }
+    .input-hint { font-size: 0.8rem; color: #8899a6; margin: 0.45rem 0 0; line-height: 1.35; }
     .policy-modal h2 { color: #1d9bf0; font-size: 1.3rem; margin: 0 0 1rem; }
     .policy-modal p, .policy-modal ul { font-size: 0.85rem; line-height: 1.55; color: #b9c4cf; }
     .policy-modal ul { padding-left: 1.2rem; margin: 0.75rem 0; }
@@ -142,6 +102,12 @@
 </head>
 <body>
   <div id="appContent" style="display:contents">
+  <aside class="ad-slot ad-slot--left" aria-label="Advertising space">
+    <div class="ad-slot__inner"><span class="ad-slot__label">Ad space</span></div>
+  </aside>
+  <aside class="ad-slot ad-slot--right" aria-label="Advertising space">
+    <div class="ad-slot__inner"><span class="ad-slot__label">Ad space</span></div>
+  </aside>
   <main>
   <div class="card">
     <h1>ClipTweet — X / Twitter Video Downloader</h1>
