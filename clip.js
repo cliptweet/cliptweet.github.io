@@ -24,6 +24,7 @@ const BANNER_FONT_FAMILY = '-apple-system, BlinkMacSystemFont, "Segoe UI", Robot
 // original 1280px-wide reference.
 const BANNER_SPEC = { standard: { refW: 1280, fontPx: 58, lineHeight: 76, padY: 46 } };
 const MIN_FONT_PX = 18;
+const TEXT_SCALE = 2;
 
 // `minWidth` is the composition floor: a frame narrower than the display size
 // gets upscaled by the browser, and the upscaled banner text is what looked
@@ -205,7 +206,9 @@ async function buildIdentityBlock(avatarUrl, label, fontPx, maxWidth) {
 
 // ── Main pipeline ────────────────────────────────────────────────────────────
 
-export async function generateClip({ url, identity, onProgress, signal }) {
+export async function generateClip({ url, identity, version = 'standard', onProgress, signal }) {
+  if (!['standard', 'reel'].includes(version)) throw new Error('Choose a supported video layout.');
+  const isReel = version === 'reel';
   if (typeof VideoEncoder === 'undefined') {
     throw new Error('This browser cannot encode video. Update to a recent Chrome, Edge or Safari 16.4+.');
   }
@@ -239,24 +242,11 @@ export async function generateClip({ url, identity, onProgress, signal }) {
   }
 
   const profile = PROFILE;
-  const durationSec = (data.durationMs || 0) / 1000;
-  if (durationSec > MAX_DURATION_SEC) {
-    throw new Error('That video is longer than 10 minutes.');
-  }
-  if (!durationSec) throw new Error('Could not determine the video duration.');
-
   const variant = data.variants.at(-1);
   if (!variant) throw new Error('That post has no playable video.');
 
   // Duration-aware bitrate budget with headroom, so the result cannot exceed
   // Keep generated files within 20 MB.
-  const totalKbps = (MAX_BYTES * 8 * HEADROOM) / durationSec / 1000;
-  const audioKbps = profile.audioKbps;
-  const videoKbps = Math.floor(Math.min(totalKbps - audioKbps, profile.maxVideoKbps));
-  if (videoKbps < 60) {
-    throw new Error('That video is too long to fit in the 20 MB limit at a usable quality.');
-  }
-
   onProgress?.('Downloading the video...', 0.06);
 
   // X's CDN answers 403 to any request that carries a Referer header, so the
@@ -269,10 +259,23 @@ export async function generateClip({ url, identity, onProgress, signal }) {
     const videoTrack = await input.getPrimaryVideoTrack();
     if (!videoTrack) throw new Error('That post has no video track.');
 
+    // X animated GIF posts are exposed as silent MP4 variants. When X omits
+    // duration_millis, read duration from the normalized MP4 track itself.
+    let durationSec = Number(data.durationMs || 0) / 1000;
+    if (!durationSec) {
+      durationSec = Number(await videoTrack.computeDuration?.() || 0);
+    }
+    if (durationSec > MAX_DURATION_SEC) throw new Error('That video is longer than 10 minutes.');
+    if (!durationSec) throw new Error('Could not determine the video duration.');
+    const totalKbps = (MAX_BYTES * 8 * HEADROOM) / durationSec / 1000;
+    const audioKbps = profile.audioKbps;
+    const videoKbps = Math.floor(Math.min(totalKbps - audioKbps, profile.maxVideoKbps));
+    if (videoKbps < 60) throw new Error('That video is too long to fit in the 20 MB limit at a usable quality.');
+
     const srcW = await videoTrack.getDisplayWidth();
     const srcH = await videoTrack.getDisplayHeight();
     // Even width/height keeps H.264 encoders happy.
-    const outW = Math.max(profile.minWidth, Math.min(profile.width, srcW)) & ~1;
+    const outW = Math.max(2, isReel ? srcW : Math.min(profile.width, srcW)) & ~1;
     const outH = Math.max(2, Math.round(outW * (srcH / srcW)) & ~1);
 
     // Banner metrics scale with the frame, so the text keeps the same share of
@@ -292,12 +295,21 @@ export async function generateClip({ url, identity, onProgress, signal }) {
     // The banner renders the post's own prose only: links, t.co codes and
     // leading mentions are stripped before layout.
     const bannerText = cleanText(data.text);
-    const lines = bannerText ? layoutLines(measurer, bannerText, outW - padX * 2) : [];
+    let lines = bannerText ? layoutLines(measurer, bannerText, outW - padX * 2) : [];
+    let reelFontPx = Math.max(14, Math.round(outW * 0.05));
+    if (isReel) {
+      for (;;) {
+        measurer.font = `800 ${reelFontPx}px ${BANNER_FONT_FAMILY}`;
+        lines = bannerText ? layoutLines(measurer, bannerText, outW * 0.9) : [];
+        if (reelFontPx <= 14 || lines.length * reelFontPx * 1.2 <= outH / 6) break;
+        reelFontPx--;
+      }
+    }
     // A post that is nothing but a link yields no prose, so no banner at all
     // rather than an empty black bar.
     // Optional identity block above the post text. Without it every added figure
     // is 0, so the plain Standard layout and its height are untouched.
-    const name = sanitizeDisplayName(identity?.name);
+    const name = isReel ? '' : sanitizeDisplayName(identity?.name);
     const hasIdentity = !!(name && identity?.avatar);
     const identityBlock = hasIdentity
       ? await buildIdentityBlock(identity.avatar, name, fontPx, outW - padX * 2)
@@ -306,21 +318,35 @@ export async function generateClip({ url, identity, onProgress, signal }) {
     const identityTop = identityBlock ? padY : 0;
     const identityTextGap = identityBlock ? Math.round(lineHeight * 0.5) : 0;
 
-    const textTop = identityTop + identityH + identityTextGap;
+    const textTop = padY + identityH + identityTextGap;
     const rawBannerH = (lines.length || identityBlock)
-      ? Math.ceil(padY * 2 + textTop + lines.length * lineHeight)
+      ? Math.ceil(padY + textTop + lines.length * lineHeight)
       : 0;
     // With an identity block the total height must stay even for H.264/yuv420.
     // Without one the original value is kept exactly, so the plain Standard
     // banner height is unchanged.
-    const bannerH = identityBlock ? ((rawBannerH & ~1) || 2) : rawBannerH;
+    const bannerH = isReel ? 0 : ((rawBannerH & ~1) || 2);
     const totalH = bannerH + outH;
+    const reelStep = reelFontPx * 1.2;
+    const reelStartY = Math.max(reelStep / 2, Math.min(outH * 5 / 6 - (lines.length - 1) * reelStep / 2, outH - (lines.length - 0.5) * reelStep));
+    const reelStrokeWidth = Math.max(2, reelFontPx * 0.14);
+    const reelMetrics = isReel ? lines.map(line => measurer.measureText(line)) : [];
+    const reelAscent = Math.max(reelFontPx, ...reelMetrics.map(metric => metric.actualBoundingBoxAscent || 0));
+    const reelDescent = Math.max(reelFontPx * 0.3, ...reelMetrics.map(metric => metric.actualBoundingBoxDescent || 0));
+    const reelPad = Math.ceil(reelStrokeWidth / 2 + 2);
+    const reelTop = isReel ? Math.max(0, Math.floor(reelStartY - reelAscent - reelPad)) : 0;
+    const reelBottom = isReel ? Math.min(outH, Math.ceil(reelStartY + Math.max(0, lines.length - 1) * reelStep + reelDescent + reelPad)) : 0;
+    const reelLayerH = Math.max(1, reelBottom - reelTop);
 
     // Draw the banner once into a reusable offscreen bitmap.
     const banner = document.createElement('canvas');
-    banner.width = outW; banner.height = bannerH;
+    banner.width = outW * TEXT_SCALE; banner.height = (isReel ? reelLayerH : bannerH) * TEXT_SCALE;
     const bctx = banner.getContext('2d');
-    bctx.fillStyle = BANNER_BG; bctx.fillRect(0, 0, outW, bannerH);
+    bctx.scale(TEXT_SCALE, TEXT_SCALE);
+    if (!isReel) {
+      bctx.fillStyle = BANNER_BG;
+      bctx.fillRect(0, 0, outW, bannerH);
+    }
     bctx.fillStyle = BANNER_FG;
     bctx.font = font;
     bctx.textAlign = 'center'; bctx.textBaseline = 'top';
@@ -329,8 +355,22 @@ export async function generateClip({ url, identity, onProgress, signal }) {
     bctx.shadowColor = 'rgba(0,0,0,0.45)';
     bctx.shadowBlur = Math.max(1, fontPx / 10);
     bctx.shadowOffsetY = Math.max(1, Math.round(fontPx / 24));
-    if (identityBlock) bctx.drawImage(identityBlock.canvas, padX, identityTop);
-    lines.forEach((line, i) => bctx.fillText(line, outW / 2, textTop + i * lineHeight));
+    if (isReel) {
+      bctx.font = `800 ${reelFontPx}px ${BANNER_FONT_FAMILY}`;
+      bctx.textBaseline = 'middle';
+      bctx.shadowColor = 'transparent';
+      bctx.strokeStyle = '#000';
+      bctx.lineJoin = 'round';
+      bctx.lineWidth = reelStrokeWidth;
+      lines.forEach((line, i) => {
+        const y = reelStartY - reelTop + i * reelStep;
+        bctx.strokeText(line, outW / 2, y, outW * 0.9);
+        bctx.fillText(line, outW / 2, y, outW * 0.9);
+      });
+    } else {
+      if (identityBlock) bctx.drawImage(identityBlock.canvas, padX, identityTop);
+      lines.forEach((line, i) => bctx.fillText(line, outW / 2, textTop + i * lineHeight));
+    }
     bctx.shadowColor = 'transparent';
     bctx.shadowBlur = 0;
     bctx.shadowOffsetY = 0;
@@ -340,6 +380,8 @@ export async function generateClip({ url, identity, onProgress, signal }) {
     const frame = document.createElement('canvas');
     frame.width = outW; frame.height = totalH;
     const fctx = frame.getContext('2d', { alpha: false });
+    fctx.imageSmoothingEnabled = true;
+    fctx.imageSmoothingQuality = 'high';
 
     onProgress?.('Encoding your clip...', 0.15);
 
@@ -367,10 +409,11 @@ export async function generateClip({ url, identity, onProgress, signal }) {
           // output size, so any automatic resize stage would rescale the banner.
           quality: new Quality({ bitrate: Math.round(videoKbps * 1000) }),
           process: (sample) => {
-            fctx.drawImage(banner, 0, 0);
+            if (!isReel && bannerH) fctx.drawImage(banner, 0, 0, outW, bannerH);
             // Explicit size: the video is scaled to the final frame, so the
             // banner above is never resampled and the text stays crisp.
-            sample.draw(fctx, 0, bannerH, outW, outH);
+            sample.draw(fctx, 0, isReel ? 0 : bannerH, outW, outH);
+            if (isReel && lines.length) fctx.drawImage(banner, 0, reelTop, outW, reelLayerH);
             return frame;
           },
           processedWidth: outW,

@@ -12,6 +12,8 @@ const profileStatus = document.getElementById('profileStatus');
 const profilePreview = document.getElementById('profilePreview');
 const profileAvatar = document.getElementById('profileAvatar');
 const profilePreviewName = document.getElementById('profilePreviewName');
+const personalizeBox = document.getElementById('personalizeBox');
+const layoutInputs = Array.from(document.querySelectorAll('input[name="version"]'));
 let generating = false;
 let objectUrl;
 
@@ -159,7 +161,16 @@ function setBusy(value) {
   generating = value;
   generateBtn.disabled = value;
   input.disabled = value;
+  layoutInputs.forEach(radio => { radio.disabled = value; });
 }
+
+function updateLayout() {
+  const isReel = layoutInputs.find(radio => radio.checked)?.value === 'reel';
+  personalizeBox.hidden = isReel;
+  if (isReel) clearProfile();
+}
+layoutInputs.forEach(radio => radio.addEventListener('change', updateLayout));
+updateLayout();
 
 generateBtn.addEventListener('click', async () => {
   if (generating) return;
@@ -174,7 +185,8 @@ generateBtn.addEventListener('click', async () => {
     // A resolve still in flight gets a short grace period; after that the clip
     // is generated without the identity block rather than being blocked.
     const typedName = displayNameInput.value.trim();
-    if (profileUrlInput.value.trim() && typedName) {
+    const version = layoutInputs.find(radio => radio.checked)?.value || 'standard';
+    if (version === 'standard' && profileUrlInput.value.trim() && typedName) {
       const settled = await Promise.race([
         runProfileResolve(),
         new Promise(resolve => setTimeout(() => resolve({ timeout: true }), PROFILE_WAIT_MS)),
@@ -191,7 +203,7 @@ generateBtn.addEventListener('click', async () => {
     console.log('[identity]', JSON.stringify(identity && { name: identity.name, avatarPrefix: identity.avatar?.slice(0, 60), avatarLength: identity.avatar?.length }));
     const { generateClip, normalizeTweetUrl } = await import('./clip.js');
     try { normalizeTweetUrl(url); } catch (error) { statusDiv.textContent = error.message; return; }
-    const result = await generateClip({ url, identity, signal: controller.signal, onProgress: message => { statusDiv.textContent = message; } });
+    const result = await generateClip({ url, version, identity: version === 'standard' ? identity : null, signal: controller.signal, onProgress: message => { statusDiv.textContent = message; } });
     if (objectUrl) URL.revokeObjectURL(objectUrl);
     objectUrl = URL.createObjectURL(result.blob);
     previewVideo.src = objectUrl;

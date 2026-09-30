@@ -77,14 +77,11 @@
     .download-section { margin-top: 1.25rem; display: flex; justify-content: center; }
     .download-btn { width: auto; min-width: 220px; padding: 0.8rem 1.5rem; font-size: 0.95rem; }
 
-    /* Passive display slots; never involved in generation or downloads. */
-    .ad-slot { position: fixed; top: 50%; transform: translateY(-50%); width: 160px; height: 600px; z-index: 1; pointer-events: none; }
-    .ad-slot--left { left: 12px; }
-    .ad-slot--right { right: 12px; }
-    .ad-slot__inner { border: 1px dashed rgba(255,255,255,0.15); background: rgba(21,32,43,0.4); display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; border-radius: 8px; }
-    .ad-slot__label { font-size: 11px; color: rgba(255,255,255,0.25); text-transform: uppercase; letter-spacing: 0.5px; }
-    @media (max-width: 1200px) { .ad-slot { display: none; } }
-
+    .version-group { display: flex; gap: 0.5rem; border: 0; padding: 0; margin: 1rem 0; }
+    .version-group legend { color: #8899a6; margin-bottom: 0.5rem; }
+    .version-group label { flex: 1; padding: 0.65rem; border: 1px solid #253341; border-radius: 10px; cursor: pointer; }
+    .version-group small { display: block; margin-top: 0.4rem; }
+    .version-group input { accent-color: #1d9bf0; }
     .input-hint { font-size: 0.8rem; color: #8899a6; margin: 0.45rem 0 0; line-height: 1.35; }
     .personalize { border: 1px solid #253341; border-radius: 12px; padding: 0.85rem 0.9rem 0.9rem; margin: 1rem 0 0; }
     .personalize__legend { font-size: 0.8rem; color: #8899a6; padding: 0 0.35rem; }
@@ -121,12 +118,6 @@
 </head>
 <body>
   <div id="appContent" style="display:contents">
-  <aside class="ad-slot ad-slot--left" aria-label="Advertising space">
-    <div class="ad-slot__inner"><span class="ad-slot__label">Ad space</span></div>
-  </aside>
-  <aside class="ad-slot ad-slot--right" aria-label="Advertising space">
-    <div class="ad-slot__inner"><span class="ad-slot__label">Ad space</span></div>
-  </aside>
   <main>
   <div class="card">
     <h1>ClipTweet — X / Twitter Video Downloader</h1>
@@ -137,6 +128,7 @@
       <input type="text" inputmode="url" id="tweetUrl" placeholder="https://x.com/user/status/123456789" autocomplete="off" autocapitalize="off" spellcheck="false">
     </div>
     <p class="input-hint" id="urlHint">Paste the link to the X/Twitter post that contains the video or GIF.</p>
+    <fieldset class="version-group" id="versionGroup"><legend>Video layout</legend><label><input type="radio" name="version" value="standard" checked> Standard<small>Text above the video</small></label><label><input type="radio" name="version" value="reel"> Reel<small>Text over the video</small></label></fieldset>
     <fieldset class="personalize" id="personalizeBox">
       <legend class="personalize__legend">Personalize your clip (optional)</legend>
       <div class="personalize__row">
@@ -176,7 +168,7 @@
     <p>ClipTweet processes the video in your browser. Keep this tab open until the clip is ready.</p>
     <h2>Frequently asked questions</h2>
     <h3>Are downloads free?</h3><p>Yes. ClipTweet provides a complete generation flow free of charge. Display advertising may help fund operation; allowing ads is optional, and ad blockers do not prevent generating or downloading. No feature is unlocked by interacting with ads.</p>
-    <h3>Which posts work?</h3><p>Public posts with a playable video and duration metadata. Private, protected or deleted posts cannot be downloaded. Some animated GIF posts lack duration metadata and are not supported.</p>
+    <h3>Which posts work?</h3><p>Public posts with a playable video or animated GIF. Private, protected or deleted posts cannot be downloaded. GIF timing is read from its normalized video track when X omits duration metadata.</p>
     <h3>What are the limits?</h3><p>Videos must be no longer than 10 minutes; the generated MP4 must fit within 20 MB. Some devices or codecs are unsupported. Use an up-to-date browser with WebCodecs support.</p>
     <h3>Does ClipTweet store my videos?</h3><p>No. Your browser downloads media directly from X's video CDN and creates the output locally. Our resolver only retrieves post metadata.</p>
     <h3>How does ClipTweet stay free?</h3><p>ClipTweet may show independent display advertising around the tool. Allowing ads is optional and helps support maintenance; it is never required to generate or download a clip.</p>
