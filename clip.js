@@ -271,7 +271,7 @@ export async function generateClip({ url, identity, version = 'standard', onProg
     const totalKbps = (MAX_BYTES * 8 * HEADROOM) / durationSec / 1000;
     const audioKbps = profile.audioKbps;
     const videoKbps = Math.floor(Math.min(totalKbps - audioKbps, profile.maxVideoKbps));
-    if (videoKbps < 60) throw new Error('That video is too long to fit in the 20 MB limit at a usable quality.');
+    if (videoKbps < 60) throw new Error(`That video exceeds the ${MAX_BYTES / (1024 * 1024)} MB size limit. Try a shorter or lower-quality video.`);
 
     const srcW = await videoTrack.getDisplayWidth();
     const srcH = await videoTrack.getDisplayHeight();
@@ -447,7 +447,7 @@ export async function generateClip({ url, identity, version = 'standard', onProg
 
     // Safety net: never expose an oversized result.
     if (blob.size > MAX_BYTES) {
-      throw new Error('That video is too long to fit in the 20 MB limit. Try a shorter post.');
+      throw new Error(`That video exceeds the ${MAX_BYTES / (1024 * 1024)} MB size limit. Try a shorter or lower-quality video.`);
     }
     return { blob, text: bannerText, lines, author: data.author, handle: data.handle };
   } finally {

@@ -5,6 +5,7 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-w6KCSq9OtHx0zHXMMgjTYQVNTC/e/jwwLJ7M2d/SHs4=' https://cdn.jsdelivr.net https://pagead2.googlesyndication.com https://ep2.adtrafficquality.google https://*.googlesyndication.com https://*.doubleclick.net https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; connect-src 'self' https://cliptweet.clipdownload.workers.dev https://cdn.jsdelivr.net https://video.twimg.com https://ep1.adtrafficquality.google https://*.googlesyndication.com https://*.doubleclick.net https://challenges.cloudflare.com; media-src 'self' blob: https://video.twimg.com; img-src 'self' data: https://ep1.adtrafficquality.google https://*.googlesyndication.com https://*.doubleclick.net; frame-src https://ep2.adtrafficquality.google https://www.google.com https://*.googlesyndication.com https://*.doubleclick.net https://challenges.cloudflare.com; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'self'">
   <meta name="referrer" content="no-referrer">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#101820">
   <title>Twitter / X Video Downloader with Post Text — ClipTweet</title>
   <meta name="description" content="Download X and Twitter videos as MP4 clips with the post text included. Free, no signup.">
   <link rel="canonical" href="https://cliptweet.github.io/">
@@ -18,72 +19,104 @@
      crossorigin="anonymous"></script>
   <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"ClipTweet","url":"https://cliptweet.github.io/","applicationCategory":"MultimediaApplication","operatingSystem":"Web browser","isAccessibleForFree":true,"description":"Create downloadable MP4 clips combining an X/Twitter post's text and video, processed in your browser."}</script>
   <style>
-    * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
-
-    /* Right-click menu lock and global selection lock */
-    body, .card, .card > *, .status, h1, label, .download-btn {
-      -webkit-user-select: none;
-      -moz-user-select: none;
-      -ms-user-select: none;
-      user-select: none;
-      -webkit-user-modify: read-only;
+    :root {
+      color-scheme: dark;
+      --page: #101820;
+      --surface: #17232f;
+      --field: #111c26;
+      --raised: #20303e;
+      --text: #f0f5f8;
+      --muted: #b1bdc8;
+      --line: #3a4a59;
+      --accent: #60b9ff;
+      --error: #ff9ba3;
+      --success: #8cdeb1;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     }
-
-    /* Allow selection and writing only in the URL input */
-    #tweetUrl {
-      -webkit-user-select: text;
-      -moz-user-select: text;
-      -ms-user-select: text;
-      user-select: text;
-    }
-
-    body { background-color: #15202b; color: #ffffff; min-height: 100vh; margin: 0; padding: 2rem 1rem; }
-    .card { margin: 0 auto; }
-    .site-info { max-width: 720px; margin: 3rem auto 0; line-height: 1.65; color: #b9c4cf; }
-    .site-info h2 { color: #fff; font-size: 1.2rem; margin-top: 2rem; }
-    a { color: #69bdff; }
-    footer { max-width: 720px; margin: 2rem auto; color: #b9c4cf; }
-    .card { background: #192734; padding: 2rem; border-radius: 16px; width: 100%; max-width: 480px; box-shadow: 0 8px 24px rgba(0,0,0,0.3); }
-    h1 { font-size: 1.5rem; margin-bottom: 0.5rem; text-align: center; color: #1d9bf0; }
-    .tagline { font-size: 0.82rem; color: #8899a6; text-align: center; line-height: 1.5; margin: 0 0 1.5rem; }
-    .ad-notice { display: flex; gap: 0.5rem; align-items: center; margin: 0 0 1.25rem; padding: 0.65rem 0.75rem; border: 1px solid #253341; border-radius: 10px; color: #8899a6; font-size: 0.78rem; line-height: 1.35; }
-    .ad-notice button { border: 0; background: transparent; color: #69bdff; cursor: pointer; padding: 0; white-space: nowrap; }
-    .ad-notice[hidden] { display: none; }
-    .form-group { margin-bottom: 1.25rem; }
-    label { display: block; font-size: 0.9rem; margin-bottom: 0.5rem; color: #8899a6; }
-    /* Styled by id, not by type: the field is type="text" so that pasted links
-       without a scheme are accepted instead of being blocked by native URL
-       validation. Keying the rule on type would strip all styling. */
-    #tweetUrl {
-      display: block;
-      width: 100%;
-      padding: 0.9rem 1.4rem;
-      border-radius: 9999px;
-      border: 1px solid #253341;
-      background: #253341;
-      color: #fff;
-      font-family: inherit;
-      font-size: 0.95rem;
-      transition: border-color 0.15s ease, background 0.15s ease;
-    }
-    #tweetUrl::placeholder { color: #6b7c8d; }
-    #tweetUrl:focus { outline: none; border-color: #1d9bf0; background: #1b2836; }
-    button.btn-primary { width: 100%; padding: 0.85rem; background: #1d9bf0; border: none; border-radius: 9999px; color: #fff; font-weight: bold; font-size: 1rem; cursor: pointer; margin-top: 1rem; }
-    button.btn-primary:hover { background: #1a8cd8; }
-
-    .status { margin-top: 1rem; text-align: center; color: #8899a6; font-size: 0.9rem; min-height: 1.2em; }
-
-    .preview-container { margin-top: 1.5rem; display: none; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100dvh; background: var(--page); color: var(--text); padding: 0 32px; line-height: 1.6; -webkit-tap-highlight-color: rgb(96 185 255 / 18%); }
+    a { color: var(--accent); text-underline-offset: 4px; }
+    a:hover { color: var(--text); }
+    button, input { font: inherit; }
+    button, summary, .version-group label { touch-action: manipulation; }
+    button, a, input, summary { scroll-margin-top: 24px; }
+    button:focus-visible, a:focus-visible, summary:focus-visible { outline: 3px solid var(--accent); outline-offset: 5px; }
+    [hidden] { display: none !important; }
+    .skip-link { position: absolute; top: 12px; left: 24px; z-index: 3; padding: 12px 18px; background: var(--text); color: var(--page); border-radius: 8px; transform: translateY(-180%); }
+    .skip-link:focus { transform: translateY(0); color: var(--page); }
+    .site-header, main, .site-footer { width: 100%; max-width: 1040px; margin-inline: auto; }
+    .site-header { min-height: 80px; display: flex; align-items: center; justify-content: space-between; gap: 24px; border-bottom: 1px solid var(--line); }
+    .wordmark { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; color: var(--text); font-size: 21px; font-weight: 750; letter-spacing: -0.7px; }
+    .brand-mark { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 9px; background: var(--accent); color: var(--page); font-size: 23px; font-weight: 800; }
+    .site-header nav, .site-footer nav { display: flex; align-items: center; gap: 24px; }
+    .site-header nav a, .site-footer nav a { display: inline-flex; align-items: center; min-height: 44px; font-size: 14px; font-weight: 550; text-decoration: none; color: var(--muted); }
+    .site-header nav a:hover, .site-footer nav a:hover { color: var(--accent); }
+    .workspace { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.4fr); gap: 56px; align-items: start; padding: 64px 0 72px; }
+    .intro { padding-top: 40px; min-width: 0; }
+    .eyebrow { color: var(--muted); font-size: 12px; font-weight: 650; letter-spacing: 1.4px; text-transform: uppercase; margin: 0 0 22px; }
+    h1 { font-size: clamp(38px, 3.5vw, 48px); font-weight: 750; line-height: 1.13; letter-spacing: -1.8px; text-wrap: balance; margin: 0; }
+    h1 span { color: var(--accent); }
+    .tagline { color: var(--muted); font-size: 17px; line-height: 1.7; max-width: 34ch; margin: 24px 0 0; text-wrap: pretty; }
+    .intro-note { color: var(--text); font-size: 13px; margin-top: 32px; padding-top: 24px; border-top: 1px solid var(--line); max-width: 270px; }
+    .card { min-width: 0; padding: 28px; border: 1px solid var(--line); border-radius: 22px; background: var(--surface); box-shadow: 0 16px 44px rgb(6 15 24 / 18%); }
+    .tool-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 26px; }
+    .tool-heading h2 { margin: 0; font-size: 21px; font-weight: 650; letter-spacing: -0.5px; }
+    .tool-heading > span { color: var(--muted); border: 1px solid var(--line); padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 650; }
+    .form-group { margin: 0; }
+    label, .version-group legend { display: block; color: var(--text); font-size: 14px; font-weight: 550; margin-bottom: 8px; }
+    #tweetUrl, .personalize__field input { width: 100%; min-width: 0; min-height: 50px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--field); color: var(--text); font-size: 16px; }
+    #tweetUrl::placeholder, .personalize__field input::placeholder { color: var(--muted); opacity: 1; }
+    #tweetUrl:focus, .personalize__field input:focus { outline: 2px solid var(--accent); outline-offset: 2px; border-color: var(--accent); }
+    .input-hint { font-size: 12px; line-height: 1.5; color: var(--muted); margin: 10px 0 24px; }
+    .version-group { display: flex; gap: 12px; border: 0; padding: 0; margin: 0 0 24px; min-width: 0; }
+    .version-group legend { padding: 0; margin-bottom: 10px; }
+    .version-group label { position: relative; display: flex; flex: 1; align-items: center; gap: 12px; min-width: 0; min-height: 90px; margin: 0; padding: 14px 30px 14px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--field); cursor: pointer; }
+    .version-group label:hover { background: var(--raised); }
+    .version-group label:has(input:checked) { border-color: var(--accent); background: #1b3348; box-shadow: inset 0 0 0 1px var(--accent); }
+    .version-group label:has(input:focus-visible) { outline: 3px solid var(--accent); outline-offset: 4px; }
+    .version-group label:has(input:disabled) { opacity: 0.6; cursor: not-allowed; }
+    .version-group input { position: absolute; right: 10px; top: 12px; margin: 0; width: 16px; height: 16px; accent-color: var(--accent); }
+    .layout-copy { min-width: 0; font-size: 14px; font-weight: 650; }
+    .version-group small { display: block; color: var(--muted); font-size: 11px; font-weight: 400; line-height: 1.5; margin-top: 4px; }
+    .layout-icon { position: relative; display: block; width: 28px; height: 34px; flex: none; border: 1px solid var(--muted); border-radius: 4px; }
+    .layout-icon::before { content: ""; position: absolute; left: 5px; right: 5px; top: 7px; height: 2px; background: var(--muted); }
+    .layout-icon::after { content: ""; position: absolute; left: 4px; right: 4px; top: 14px; bottom: 4px; background: var(--muted); opacity: 0.4; border-radius: 2px; }
+    .layout-icon--reel { width: 22px; margin-inline: 3px; }
+    .layout-icon--reel::before { top: 15px; z-index: 1; background: var(--text); }
+    .layout-icon--reel::after { top: 4px; }
+    .personalize { min-width: 0; margin: 0 0 24px; padding: 14px 16px 16px; border: 1px solid var(--line); border-radius: 12px; }
+    .personalize__legend { color: var(--muted); padding: 0 6px; font-size: 12px; }
+    .personalize__row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+    .personalize__field { min-width: 0; }
+    .personalize__field label { font-size: 12px; }
+    .personalize__field input { min-height: 46px; font-size: 16px; padding: 10px; }
+    .personalize__field input[aria-invalid="true"] { border-color: var(--error); }
+    .personalize__hint { color: var(--muted); font-size: 11px; line-height: 1.55; margin: 8px 0 0; }
+    .personalize__status { margin: 12px 0 0; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+    .personalize__status:empty { display: none; }
+    .personalize__status[data-tone="error"] { color: var(--error); }
+    .personalize__status[data-tone="ok"] { color: var(--success); }
+    .personalize__preview { display: flex; align-items: center; gap: 10px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); font-size: 14px; }
+    .personalize__preview img { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; flex: none; }
+    #profilePreviewName { overflow-wrap: anywhere; min-width: 0; }
+    .btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 10px; width: 100%; min-height: 52px; padding: 12px 18px; border: 1px solid transparent; border-radius: 10px; background: var(--accent); color: var(--page); font-size: 16px; font-weight: 750; cursor: pointer; }
+    .btn-primary:hover:not(:disabled) { background: #8dccff; }
+    .btn-primary:active:not(:disabled) { transform: translateY(1px); }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+    input:disabled { opacity: 0.65; cursor: not-allowed; }
+    #generateBtn:disabled::before { content: ""; width: 14px; height: 14px; flex: none; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; }
+    .status { color: var(--muted); font-size: 13px; line-height: 1.55; margin-top: 14px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; overflow-wrap: anywhere; }
+    .status:empty { display: none; }
+    .preview-container { display: none; margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--line); }
     .preview-container.active { display: block; }
-    .preview-video { width: 100%; border-radius: 12px; border: 1px solid #253341; }
-    .download-section { margin-top: 1.25rem; display: flex; justify-content: center; }
-    .download-btn { width: auto; min-width: 220px; padding: 0.8rem 1.5rem; font-size: 0.95rem; }
-
-    .version-group { display: flex; gap: 0.5rem; border: 0; padding: 0; margin: 1rem 0; }
-    .version-group legend { color: #8899a6; margin-bottom: 0.5rem; }
-    .version-group label { flex: 1; padding: 0.65rem; border: 1px solid #253341; border-radius: 10px; cursor: pointer; }
-    .version-group small { display: block; margin-top: 0.4rem; }
-    .version-group input { accent-color: #1d9bf0; }
+    .result-heading { font-size: 15px; font-weight: 650; margin: 0 0 12px; }
+    .preview-video { display: block; width: 100%; max-height: 580px; background: var(--field); border-radius: 10px; border: 1px solid var(--line); object-fit: contain; }
+    .download-section { margin-top: 14px; }
+    .download-btn { background: var(--raised); border-color: var(--accent); color: var(--accent); }
+    .download-btn:hover:not(:disabled) { background: #2b4052; }
+    .ad-notice { display: flex; gap: 14px; align-items: center; margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11px; line-height: 1.6; }
+    .ad-notice button { min-height: 44px; background: transparent; color: var(--accent); border: 0; padding: 0 4px; font-size: 12px; font-weight: 600; cursor: pointer; }
+    .ad-notice button:hover { text-decoration: underline; text-underline-offset: 4px; }
     /* Existing passive display units: no placeholder paint or reserved content columns. */
     .ad-slot { display: none; position: fixed; top: 50%; transform: translateY(-50%); width: 160px; z-index: 1; }
     .ad-slot--left { left: 12px; }
@@ -91,38 +124,89 @@
     .ad-slot .adsbygoogle { width: 160px; min-height: 600px; }
     .adsbygoogle[data-ad-status="unfilled"] { display: none !important; }
     @media (min-width: 1201px) { .ad-slot { display: block; } }
-    .input-hint { font-size: 0.8rem; color: #8899a6; margin: 0.45rem 0 0; line-height: 1.35; }
-    .personalize { border: 1px solid #253341; border-radius: 12px; padding: 0.85rem 0.9rem 0.9rem; margin: 1rem 0 0; }
-    .personalize__legend { font-size: 0.8rem; color: #8899a6; padding: 0 0.35rem; }
-    .personalize__row { display: flex; gap: 0.75rem; }
-    .personalize__field { flex: 1 1 0; min-width: 0; }
-    .personalize__field label { font-size: 0.78rem; margin-bottom: 0.3rem; }
-    .personalize__field input { width: 100%; box-sizing: border-box; padding: 0.55rem 0.6rem; font-size: 0.85rem; background: #0b1620; border: 1px solid #253341; border-radius: 10px; color: #fff; min-height: 44px; -webkit-user-select: text; user-select: text; }
-    .personalize__field input:focus { outline: none; border-color: #1d9bf0; }
-    .personalize__field input[aria-invalid="true"] { border-color: #f4212e; }
-    .personalize__hint { font-size: 0.72rem; color: #6b7c8d; margin: 0.3rem 0 0; line-height: 1.3; }
-    .personalize__status { font-size: 0.76rem; margin: 0.5rem 0 0; min-height: 1.1em; color: #8899a6; }
-    .personalize__status[data-tone="error"] { color: #ff7b83; }
-    .personalize__status[data-tone="ok"] { color: #6bd39b; }
-    .personalize__preview { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.5rem; font-size: 0.82rem; color: #fff; }
-    .personalize__preview[hidden] { display: none; }
-    .personalize__preview img { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; flex: none; }
-    @media (max-width: 560px) { .personalize__row { flex-direction: column; gap: 0.6rem; } }
-    .policy-modal h2 { color: #1d9bf0; font-size: 1.3rem; margin: 0 0 1rem; }
-    .policy-modal p, .policy-modal ul { font-size: 0.85rem; line-height: 1.55; color: #b9c4cf; }
-    .policy-modal ul { padding-left: 1.2rem; margin: 0.75rem 0; }
-    .policy-modal .policy-actions { margin-top: 0.75rem; text-align: center; }
-    .policy-modal .policy-actions button {
-      background: #1d9bf0; color: #fff; border: none; border-radius: 9999px;
-      padding: 0.8rem 2rem; font-weight: bold; font-size: 0.95rem; cursor: pointer;
+    .site-info { color: var(--muted); }
+    .site-info h2 { color: var(--text); font-size: 25px; line-height: 1.3; font-weight: 650; letter-spacing: -0.6px; margin: 0 0 20px; text-wrap: balance; scroll-margin-top: 28px; }
+    .site-info p { font-size: 14px; line-height: 1.85; margin: 0 0 16px; }
+    .guide-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 64px; padding: 52px 0; border-top: 1px solid var(--line); }
+    .how-block ol { list-style: none; padding: 0; margin: 0 0 20px; counter-reset: clip-step; }
+    .how-block li { display: flex; align-items: baseline; gap: 14px; counter-increment: clip-step; font-size: 14px; margin-bottom: 14px; }
+    .how-block li::before { content: counter(clip-step); display: grid; place-items: center; flex: none; width: 26px; height: 26px; border: 1px solid var(--line); border-radius: 7px; color: var(--accent); font-size: 12px; font-weight: 650; }
+    .how-block > p { color: var(--text); font-size: 12px; }
+    .faq-section { display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.4fr); gap: 64px; padding: 52px 0; border-top: 1px solid var(--line); }
+    .faq-list { min-width: 0; }
+    .faq-list details { border-bottom: 1px solid var(--line); }
+    .faq-list details:first-child summary { padding-top: 0; }
+    .faq-list summary { display: flex; justify-content: space-between; align-items: center; gap: 20px; list-style: none; min-height: 58px; padding: 18px 0; cursor: pointer; color: var(--text); }
+    .faq-list summary::-webkit-details-marker { display: none; }
+    .faq-list summary::after { content: "+"; color: var(--accent); font-size: 22px; font-weight: 400; flex: none; }
+    .faq-list details[open] summary::after { content: "−"; }
+    .faq-list summary:hover { color: var(--accent); }
+    .faq-list h3 { margin: 0; font-size: 15px; line-height: 1.5; font-weight: 600; }
+    .faq-list details p { padding: 0 28px 8px 0; }
+    .legal-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 64px; padding: 48px 0 24px; border-top: 1px solid var(--line); }
+    .legal-grid h2 { font-size: 17px; letter-spacing: -0.2px; }
+    .legal-grid p { font-size: 12px; overflow-wrap: anywhere; }
+    .site-footer { display: flex; align-items: center; gap: 24px; padding: 24px 0 32px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+    .site-footer > span { color: var(--text); font-size: 16px; font-weight: 700; letter-spacing: -0.4px; }
+    .site-footer p { margin: 0; }
+    .site-footer nav { margin-left: auto; }
+    @media (prefers-reduced-motion: no-preference) {
+      a, button, input, .version-group label, summary { transition: color 140ms ease, background-color 140ms ease, border-color 140ms ease, transform 140ms ease; }
+      #generateBtn:disabled::before { animation: processing 800ms linear infinite; }
+      .preview-container.active { animation: result-in 180ms ease-out; }
     }
-
-    /* The access wall stays separate from the inert application content. */
-    .access-message { max-width: 420px; padding: 1.25rem; border-radius: 16px; background: #192734; }
-    .access-message h2 { color: #1d9bf0; }
-    .access-message p { color: #b9c4cf; line-height: 1.6; }
-    button:disabled { opacity: 0.55; cursor: not-allowed; }
-    button:focus-visible { outline: 3px solid #fff; outline-offset: 4px; }
+    @keyframes processing { to { transform: rotate(360deg); } }
+    @keyframes result-in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+    @media (min-width: 1201px) and (max-width: 1439px) {
+      .site-header, main, .site-footer { max-width: calc(100vw - 384px); }
+      .workspace { grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.3fr); gap: 32px; padding-top: 48px; }
+      .intro { padding-top: 32px; }
+      h1 { font-size: 38px; }
+      .tagline { max-width: 52ch; margin-top: 16px; }
+      .intro-note { border: 0; padding: 0; margin: 14px 0 0; }
+      .guide-grid, .faq-section, .legal-grid { gap: 32px; }
+    }
+    @media (max-width: 1023px) {
+      body { padding-inline: 24px; }
+      .workspace { grid-template-columns: 1fr; gap: 28px; max-width: 680px; margin-inline: auto; padding: 36px 0 48px; }
+      .intro { padding-top: 0; }
+      h1 { max-width: 560px; font-size: 42px; }
+      .eyebrow { margin-bottom: 14px; }
+      .tagline { max-width: 52ch; margin-top: 16px; font-size: 16px; }
+      .intro-note { border: 0; padding: 0; margin: 12px 0 0; }
+      .guide-grid, .faq-section, .legal-grid { gap: 36px; padding-block: 36px; }
+      .site-info h2 { font-size: 22px; }
+    }
+    @media (max-width: 639px) {
+      body { padding-inline: max(18px, env(safe-area-inset-left), env(safe-area-inset-right)); }
+      .site-header { min-height: 72px; gap: 16px; }
+      .wordmark { font-size: 19px; gap: 8px; }
+      .brand-mark { width: 28px; height: 28px; font-size: 20px; }
+      .site-header nav { gap: 16px; }
+      .site-header nav a { font-size: 12px; }
+      .workspace { padding-top: 28px; gap: 24px; }
+      h1 { font-size: 36px; letter-spacing: -1.2px; }
+      .eyebrow { font-size: 10px; letter-spacing: 1.2px; margin-bottom: 12px; }
+      .tagline { font-size: 14px; line-height: 1.7; margin-top: 14px; }
+      .intro-note { font-size: 12px; }
+      .card { padding: 22px 18px; border-radius: 16px; }
+      .tool-heading { margin-bottom: 22px; }
+      .tool-heading h2 { font-size: 19px; }
+      .version-group { gap: 10px; }
+      .version-group label { min-height: 94px; padding: 12px 24px 12px 12px; gap: 9px; }
+      .layout-icon { display: none; }
+      .personalize { padding-inline: 12px; }
+      .personalize__row { grid-template-columns: 1fr; gap: 18px; }
+      .personalize__hint { font-size: 12px; }
+      .ad-notice { gap: 10px; }
+      .guide-grid, .faq-section, .legal-grid { grid-template-columns: 1fr; gap: 28px; }
+      .faq-section h2 { margin-bottom: 0; }
+      .site-info p { font-size: 14px; }
+      .legal-grid p { font-size: 12px; }
+      .site-footer { display: grid; grid-template-columns: 1fr auto; gap: 8px 18px; padding-bottom: max(24px, env(safe-area-inset-bottom)); }
+      .site-footer p { grid-column: 1 / -1; grid-row: 2; }
+      .site-footer nav { gap: 18px; }
+    }
   </style>
 </head>
 <body>
@@ -133,28 +217,38 @@
   <aside class="ad-slot ad-slot--right" aria-label="Advertising space">
     <ins class="adsbygoogle" style="display:block" data-ad-client="ca-pub-1549712380501865" data-ad-slot="7989104915" data-ad-format="auto" data-full-width-responsive="true"></ins>
   </aside>
-  <main>
+  <a class="skip-link" href="#main">Skip to the tool</a>
+  <header class="site-header">
+    <a class="wordmark" href="#main" aria-label="ClipTweet home" translate="no"><span class="brand-mark" aria-hidden="true">C</span>ClipTweet</a>
+    <nav aria-label="Main navigation"><a href="#how-it-works">How it works</a><a href="#faq">FAQ</a></nav>
+  </header>
+  <main id="main" tabindex="-1">
+  <section class="workspace" aria-label="Clip creator">
+  <div class="intro">
+    <p class="eyebrow">X / Twitter video downloader</p>
+    <h1>Turn posts into <span>shareable clips.</span></h1>
+    <p class="tagline">Keep the text. Keep the video. Create a ready-to-share MP4 in your browser.</p>
+    <p class="intro-note">Free to use. No account needed.</p>
+  </div>
   <div class="card">
-    <h1>ClipTweet — X / Twitter Video Downloader</h1>
-    <p class="tagline">Paste an X/Twitter post link and get an MP4 with the post text above its video, ready to download.</p>
-    <div id="adNotice" class="ad-notice" role="note"><span>ClipTweet is free to use. Ads help us keep it that way. If you'd like, you can allow ads on this site.</span><button id="adNoticeClose" type="button">Dismiss</button></div>
+    <div class="tool-heading"><h2>Create your clip</h2><span>MP4</span></div>
     <div class="form-group">
       <label for="tweetUrl">Tweet or Video URL:</label>
-      <input type="text" inputmode="url" id="tweetUrl" placeholder="https://x.com/user/status/123456789" autocomplete="off" autocapitalize="off" spellcheck="false">
+      <input type="text" inputmode="url" id="tweetUrl" name="tweetUrl" placeholder="https://x.com/user/status/123456789" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="urlHint">
     </div>
     <p class="input-hint" id="urlHint">Paste the link to the X/Twitter post that contains the video or GIF.</p>
-    <fieldset class="version-group" id="versionGroup"><legend>Video layout</legend><label><input type="radio" name="version" value="standard" checked> Standard<small>Text above the video</small></label><label><input type="radio" name="version" value="reel"> Reel<small>Text over the video</small></label></fieldset>
+    <fieldset class="version-group" id="versionGroup"><legend>Video layout</legend><label><input type="radio" name="version" value="standard" checked><span class="layout-icon layout-icon--standard" aria-hidden="true"></span><span class="layout-copy">Standard<small>Text above the video</small></span></label><label><input type="radio" name="version" value="reel"><span class="layout-icon layout-icon--reel" aria-hidden="true"></span><span class="layout-copy">Reel<small>Text over the video</small></span></label></fieldset>
     <fieldset class="personalize" id="personalizeBox">
       <legend class="personalize__legend">Personalize your clip (optional)</legend>
       <div class="personalize__row">
         <div class="personalize__field">
           <label for="profileUrl">Your X profile or post</label>
-          <input type="text" inputmode="url" id="profileUrl" placeholder="https://x.com/you or @you" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="profileHint" aria-invalid="false">
+          <input type="text" inputmode="url" id="profileUrl" name="profileUrl" placeholder="https://x.com/you or @you" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="profileHint" aria-invalid="false">
           <p class="personalize__hint" id="profileHint">Paste your profile URL or any of your posts &mdash; we only use it to get your profile picture.</p>
         </div>
         <div class="personalize__field">
           <label for="displayName">Display name</label>
-          <input type="text" id="displayName" placeholder="@yourname" maxlength="30" autocomplete="off" spellcheck="false" aria-describedby="displayNameHint">
+          <input type="text" id="displayName" name="displayName" placeholder="Your chosen name" maxlength="30" autocomplete="off" spellcheck="false" aria-describedby="displayNameHint">
           <p class="personalize__hint" id="displayNameHint">Shown next to your picture. We never fill this in for you.</p>
         </div>
       </div>
@@ -168,35 +262,54 @@
     <div id="status" class="status" role="status" aria-live="polite"></div>
 
     <div id="previewContainer" class="preview-container">
+      <h3 class="result-heading">Your clip is ready</h3>
       <video id="previewVideo" class="preview-video" controls muted playsinline></video>
       <div class="download-section">
         <button id="downloadBtn" class="btn-primary download-btn">Download MP4</button>
       </div>
     </div>
+    <div id="adNotice" class="ad-notice" role="note"><span>ClipTweet is free to use. Ads help us keep it that way. If you'd like, you can allow ads on this site.</span><button id="adNoticeClose" type="button">Dismiss</button></div>
   </div>
+  </section>
 
   <section class="site-info" aria-label="About ClipTweet">
+    <div class="guide-grid">
+    <div class="about-block">
     <h2>Download Twitter videos with the post text</h2>
     <p>ClipTweet turns a public X (Twitter) post into an MP4 with its text above the video. It is a free Twitter video downloader for making a clip that keeps the post's context, rather than a download of the unchanged source video. No account or installation is required.</p>
-    <h2>How to download an X video as an MP4</h2>
+    </div>
+    <div class="how-block">
+    <h2 id="how-it-works">How to download an X video as an MP4</h2>
     <ol><li>Copy the link to a public X or Twitter post containing a video.</li><li>Paste it above and select Generate Clip.</li><li>Preview your clip and select Download MP4.</li></ol>
     <p>ClipTweet processes the video in your browser. Keep this tab open until the clip is ready.</p>
-    <h2>Frequently asked questions</h2>
-    <h3>Are downloads free?</h3><p>Yes. ClipTweet provides a complete generation flow free of charge. Display advertising may help fund operation; allowing ads is optional, and ad blockers do not prevent generating or downloading. No feature is unlocked by interacting with ads.</p>
-    <h3>Which posts work?</h3><p>Public posts with a playable video or animated GIF. Private, protected or deleted posts cannot be downloaded. GIF timing is read from its normalized video track when X omits duration metadata.</p>
-    <h3>What are the limits?</h3><p>Videos must be no longer than 10 minutes; the generated MP4 must fit within 20 MB. Some devices or codecs are unsupported. Use an up-to-date browser with WebCodecs support.</p>
-    <h3>Does ClipTweet store my videos?</h3><p>No. Your browser downloads media directly from X's video CDN and creates the output locally. Our resolver only retrieves post metadata.</p>
-    <h3>How does ClipTweet stay free?</h3><p>ClipTweet may show independent display advertising around the tool. Allowing ads is optional and helps support maintenance; it is never required to generate or download a clip.</p>
-    <h3>Can I use an ad blocker?</h3><p>Yes. Ad blockers and Brave Shields do not affect generation or downloads. You can dismiss the optional notice.</p>
+    </div>
+    </div>
+    <div class="faq-section">
+    <h2 id="faq">Frequently asked questions</h2>
+    <div class="faq-list">
+    <details><summary><h3>Are downloads free?</h3></summary><p>Yes. ClipTweet provides a complete generation flow free of charge. Display advertising may help fund operation; allowing ads is optional, and ad blockers do not prevent generating or downloading. No feature is unlocked by interacting with ads.</p></details>
+    <details><summary><h3>Which posts work?</h3></summary><p>Public posts with a playable video or animated GIF. Private, protected or deleted posts cannot be downloaded. GIF timing is read from its normalized video track when X omits duration metadata.</p></details>
+    <details><summary><h3>What are the limits?</h3></summary><p>Videos must be no longer than 10 minutes; the generated MP4 must fit within 20 MB. Some devices or codecs are unsupported. Use an up-to-date browser with WebCodecs support.</p></details>
+    <details><summary><h3>Does ClipTweet store my videos?</h3></summary><p>No. Your browser downloads media directly from X's video CDN and creates the output locally. Our resolver only retrieves post metadata.</p></details>
+    <details><summary><h3>How does ClipTweet stay free?</h3></summary><p>ClipTweet may show independent display advertising around the tool. Allowing ads is optional and helps support maintenance; it is never required to generate or download a clip.</p></details>
+    <details><summary><h3>Can I use an ad blocker?</h3></summary><p>Yes. Ad blockers and Brave Shields do not affect generation or downloads. You can dismiss the optional notice.</p></details>
+    </div>
+    </div>
+    <div class="legal-grid">
+    <section aria-labelledby="terms">
     <h2 id="terms">Terms of use</h2>
     <p>ClipTweet provides a technical tool that processes content selected by the user. You are responsible for having the rights or permissions needed to process or download that content and for respecting applicable laws, platform rules, privacy, copyright and other third-party rights. ClipTweet does not grant rights to third-party content. ClipTweet is independent of X Corp. Availability and compatibility are not guaranteed. Automated bulk extraction and attempts to bypass service limits are not permitted.</p>
+    </section>
+    <section aria-labelledby="privacy">
     <h2 id="privacy">Privacy</h2>
     <p>ClipTweet sends the post link to its Cloudflare Worker to retrieve public metadata from X. Your browser contacts X's video CDN and jsDelivr for the video-processing library. These providers receive connection information such as your IP address. Generated videos remain on your device; ClipTweet does not upload or store them.</p>
     <p>Cloudflare processes resolver requests and may retain operational logs. Generated videos remain on your device.</p>
     <p>ClipTweet loads Google AdSense for advertising. Third-party vendors, including Google, may use cookies to serve ads based on prior visits to this or other websites. Google's advertising cookies allow Google and its partners to serve ads based on those visits. Other advertising partners may also use cookies or similar technologies. You can manage personalized advertising in <a href="https://myadcenter.google.com/" rel="noopener noreferrer">Google My Ad Center</a> or opt out of participating third-party vendors through <a href="https://www.aboutads.info/choices/" rel="noopener noreferrer">YourAdChoices</a>. See <a href="https://business.safety.google/privacy/" rel="noopener noreferrer">how Google uses data</a>. This optional advertising notice is not a consent form.</p>
+    </section>
+    </div>
   </section>
   </main>
-  <footer><a href="#terms">Terms</a> · <a href="#privacy">Privacy</a> · ClipTweet is not affiliated with X / Twitter.</footer>
+  <footer class="site-footer"><span translate="no">ClipTweet</span><p>ClipTweet is not affiliated with X / Twitter.</p><nav aria-label="Legal"><a href="#terms">Terms</a><a href="#privacy">Privacy</a></nav></footer>
   </div>
   <script src="/config.js"></script>
   <script src="/app.js"></script>
