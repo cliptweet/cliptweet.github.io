@@ -153,7 +153,7 @@ async function buildIdentityBlock(avatarUrl, label, fontPx, maxWidth) {
     let diameter = Math.round(fontPx * 2.25);
     if (bitmap.width < diameter) diameter = bitmap.width;   // never upscale
     const gap = Math.round(diameter * 0.4);                // avatar to name
-    const nameFontPx = Math.max(12, Math.round(fontPx * 0.88));
+    let nameFontPx = Math.max(12, Math.round(fontPx * 0.88));
 
     // The name is centred with the avatar, so its own width decides the strip.
     const measurer = document.createElement('canvas').getContext('2d');
@@ -226,13 +226,10 @@ export async function generateClip({ url, identity, version = 'standard', onProg
     body: JSON.stringify({ url: canonical }),
     signal,
   };
-  console.log('[fetch] START', { url: resolveUrl, method: resolveOptions.method, origin: location.origin, apiBase: globalThis.CLIPTWEET_API_BASE });
   let res;
   try {
     res = await fetch(resolveUrl, resolveOptions);
-    console.log('[fetch] OK', { url: resolveUrl, status: res.status, ok: res.ok, acao: res.headers.get('access-control-allow-origin') });
   } catch (err) {
-    console.error('[fetch] FAIL', { url: resolveUrl, errorName: err.name, errorMessage: err.message, stack: err.stack });
     throw err;
   }
   const data = await res.json().catch(() => ({}));

@@ -17,11 +17,18 @@ const layoutInputs = Array.from(document.querySelectorAll('input[name="version"]
 let generating = false;
 let objectUrl;
 
+// Advertising never controls generation or downloads.
+if (matchMedia('(min-width: 1201px)').matches) {
+  document.querySelectorAll('.ad-slot .adsbygoogle').forEach(() => {
+    try { (window.adsbygoogle = window.adsbygoogle || []).push({}); }
+    catch (error) { console.warn('AdSense slot could not initialize.', error); }
+  });
+}
+
 // ── Optional identity (avatar + display name) ─────────────────────────────────
 // Resolution is best-effort and never blocks Generate: if it fails or is still
 // running at generate time, the clip is produced without the identity block.
 const profileCache = new Map();
-let profilePending = null;   // { handle, promise }
 let profileController = null;
 let debounceId = 0;
 
@@ -65,7 +72,6 @@ function parseProfileInput(raw) {
 function clearProfile() {
   profileController?.abort();
   profileController = null;
-  profilePending = null;
   hideProfilePreview();
   setProfileStatus('');
   profileUrlInput.setAttribute('aria-invalid', 'false');
@@ -85,13 +91,10 @@ async function resolveProfile(raw) {
   try {
     const profileFetchUrl = parsed.kind === 'post' ? `${apiBase}/api/profile` : `${apiBase}/api/profile?url=${encodeURIComponent(raw)}`;
     const profileFetchOptions = parsed.kind === 'post' ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ url: `https://x.com/i/status/${parsed.statusId}` }), signal: controller.signal } : { method: 'GET', signal: controller.signal };
-    console.log('[fetch] START', { url: profileFetchUrl, method: profileFetchOptions.method, origin: location.origin, apiBase: globalThis.CLIPTWEET_API_BASE });
     let res;
     try {
       res = await fetch(profileFetchUrl, profileFetchOptions);
-      console.log('[fetch] OK', { url: profileFetchUrl, status: res.status, ok: res.ok, acao: res.headers.get('access-control-allow-origin') });
     } catch (err) {
-      console.error('[fetch] FAIL', { url: profileFetchUrl, errorName: err.name, errorMessage: err.message, stack: err.stack });
       throw err;
     }
     const data = await res.json().catch(() => ({}));
@@ -118,14 +121,12 @@ async function runProfileResolve() {
     hideProfilePreview();
     setProfileStatus(result.error === 'Invalid profile' ? 'Invalid profile' : result.error, 'error');
     profileUrlInput.setAttribute('aria-invalid', 'true');
-    profilePending = null;
     return result;
   }
   profileUrlInput.setAttribute('aria-invalid', 'false');
   if (!result.avatar) {
     hideProfilePreview();
     setProfileStatus('This account has no profile picture', 'error');
-    profilePending = null;
     return result;
   }
   if (!displayNameInput.value.trim()) {
@@ -200,7 +201,6 @@ generateBtn.addEventListener('click', async () => {
         setProfileStatus(why, 'error');
       }
     }
-    console.log('[identity]', JSON.stringify(identity && { name: identity.name, avatarPrefix: identity.avatar?.slice(0, 60), avatarLength: identity.avatar?.length }));
     const { generateClip, normalizeTweetUrl } = await import('./clip.js');
     try { normalizeTweetUrl(url); } catch (error) { statusDiv.textContent = error.message; return; }
     const result = await generateClip({ url, version, identity: version === 'standard' ? identity : null, signal: controller.signal, onProgress: message => { statusDiv.textContent = message; } });
