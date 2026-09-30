@@ -12,17 +12,8 @@ const profileStatus = document.getElementById('profileStatus');
 const profilePreview = document.getElementById('profilePreview');
 const profileAvatar = document.getElementById('profileAvatar');
 const profilePreviewName = document.getElementById('profilePreviewName');
-const personalizeBox = document.getElementById('personalizeBox');
 let generating = false;
 let objectUrl;
-const layoutInputs = Array.from(document.querySelectorAll('input[name="version"]'));
-
-if (matchMedia('(min-width: 1201px)').matches) {
-  document.querySelectorAll('.ad-slot .adsbygoogle').forEach(() => {
-    try { (window.adsbygoogle = window.adsbygoogle || []).push({}); }
-    catch (error) { console.warn('AdSense slot could not initialize.', error); }
-  });
-}
 
 // ── Optional identity (avatar + display name) ─────────────────────────────────
 // Resolution is best-effort and never blocks Generate: if it fails or is still
@@ -31,12 +22,6 @@ const profileCache = new Map();
 let profilePending = null;   // { handle, promise }
 let profileController = null;
 let debounceId = 0;
-function syncLayout() {
-  const standard = layoutInputs.find(radio => radio.checked)?.value !== 'reel';
-  personalizeBox.hidden = !standard;
-}
-layoutInputs.forEach(radio => radio.addEventListener('change', syncLayout));
-syncLayout();
 
 const PROFILE_WAIT_MS = 8000;
 
@@ -62,11 +47,17 @@ function hideProfilePreview() {
   profileAvatar.removeAttribute('src');
 }
 
-function extractProfileUsername(raw) {
-  const clean = String(raw || '').trim();
-  if (!clean) return '';
-  const match = clean.match(/(?:https?:\/\/(?:twitter|x)\.com\/)?@?([a-zA-Z0-9_]{1,15})\/?$/i);
-  return match ? match[1] : '';
+// A post link is the only accepted input; the display name is never sent.
+// Returns the author handle plus the status id, which the resolver accepts in
+// its canonical /i/status/<id> form.
+function parseProfileInput(raw) {
+  const value = String(raw || '').trim();
+  if (!value) return null;
+  const postMatch = value.match(/^(?:https?:\/\/)?(?:www\.|mobile\.)?(?:x|twitter)\.com\/(?:([A-Za-z0-9_]{1,15})\/status|i\/(?:web\/)?status)\/(\d{5,25})\/?$/i);
+  if (postMatch) return { kind: 'post', handle: postMatch[1] || '', statusId: postMatch[2] };
+  const profileMatch = value.match(/^(?:https?:\/\/)?(?:www\.|mobile\.)?(?:x|twitter)\.com\/@?([A-Za-z0-9_]{1,15})\/?$/i) || value.match(/^@?([A-Za-z0-9_]{1,15})$/);
+  if (profileMatch) return { kind: 'profile', handle: profileMatch[1] };
+  return null;
 }
 
 function clearProfile() {
@@ -78,19 +69,39 @@ function clearProfile() {
   profileUrlInput.setAttribute('aria-invalid', 'false');
 }
 
-function resolveProfile(raw) {
-  const handle = extractProfileUsername(raw);
-  if (!handle) return { empty: true };
-  if (profileCache.has(handle)) return { ...profileCache.get(handle), handle };
+async function resolveProfile(raw) {
+  const parsed = parseProfileInput(raw);
+  if (!parsed) return { error: 'Invalid profile' };
+  if (profileCache.has(parsed.handle)) return { ...profileCache.get(parsed.handle), handle: parsed.handle };
+
+  // Only the newest request may write state.
+  profileController?.abort();
+  const controller = new AbortController();
+  profileController = controller;
+  setProfileStatus('Loading profile…');
   const apiBase = String(globalThis.CLIPTWEET_API_BASE || '').replace(/\/$/, '');
-  const entry = { handle, avatar: `https://unavatar.io/twitter/${encodeURIComponent(handle)}` };
-  profileCache.set(handle, entry);
-  fetch(`${apiBase}/api/profile?url=${encodeURIComponent(handle)}`).then(async response => {
-    if (!response.ok) return;
-    const data = await response.json().catch(() => ({}));
-    if (data.avatar && resolvedHandle === handle) profileAvatar.src = data.avatar;
-  }).catch(() => {});
-  return entry;
+  try {
+    const profileFetchUrl = parsed.kind === 'post' ? `${apiBase}/api/profile` : `${apiBase}/api/profile?url=${encodeURIComponent(raw)}`;
+    const profileFetchOptions = parsed.kind === 'post' ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ url: `https://x.com/i/status/${parsed.statusId}` }), signal: controller.signal } : { method: 'GET', signal: controller.signal };
+    console.log('[fetch] START', { url: profileFetchUrl, method: profileFetchOptions.method, origin: location.origin, apiBase: globalThis.CLIPTWEET_API_BASE });
+    let res;
+    try {
+      res = await fetch(profileFetchUrl, profileFetchOptions);
+      console.log('[fetch] OK', { url: profileFetchUrl, status: res.status, ok: res.ok, acao: res.headers.get('access-control-allow-origin') });
+    } catch (err) {
+      console.error('[fetch] FAIL', { url: profileFetchUrl, errorName: err.name, errorMessage: err.message, stack: err.stack });
+      throw err;
+    }
+    const data = await res.json().catch(() => ({}));
+    if (controller.signal.aborted) return { empty: true };
+    if (!res.ok) return { error: data.error || 'Could not load the profile.' };
+    const entry = { handle: data.handle || data.username || parsed.handle, avatar: data.avatar || null };
+    profileCache.set(parsed.handle, entry);
+    return entry;
+  } catch (error) {
+    if (error.name === 'AbortError') return { empty: true };
+    return { error: "Couldn't load the profile. You can still generate without it." };
+  }
 }
 
 function scheduleProfileResolve() {
@@ -103,7 +114,7 @@ async function runProfileResolve() {
   if (result.empty) { clearProfile(); return result; }
   if (result.error) {
     hideProfilePreview();
-    setProfileStatus('Enter a valid X username or profile URL.', 'error');
+    setProfileStatus(result.error === 'Invalid profile' ? 'Invalid profile' : result.error, 'error');
     profileUrlInput.setAttribute('aria-invalid', 'true');
     profilePending = null;
     return result;
@@ -148,13 +159,12 @@ function setBusy(value) {
   generating = value;
   generateBtn.disabled = value;
   input.disabled = value;
-  layoutInputs.forEach(radio => { radio.disabled = value; });
 }
 
 generateBtn.addEventListener('click', async () => {
   if (generating) return;
-  const sourcePostUrl = input.value.trim();
-  if (!sourcePostUrl) { statusDiv.textContent = 'Paste a valid X/Twitter post URL.'; return; }
+  const url = input.value.trim();
+  if (!url) { statusDiv.textContent = 'Paste a valid X/Twitter post URL.'; return; }
   setBusy(true);
   previewContainer.classList.remove('active');
   const controller = new AbortController();
@@ -164,8 +174,7 @@ generateBtn.addEventListener('click', async () => {
     // A resolve still in flight gets a short grace period; after that the clip
     // is generated without the identity block rather than being blocked.
     const typedName = displayNameInput.value.trim();
-    const standard = layoutInputs.find(radio => radio.checked)?.value !== 'reel';
-    if (standard && profileUrlInput.value.trim() && typedName) {
+    if (profileUrlInput.value.trim() && typedName) {
       const settled = await Promise.race([
         runProfileResolve(),
         new Promise(resolve => setTimeout(() => resolve({ timeout: true }), PROFILE_WAIT_MS)),
@@ -179,10 +188,10 @@ generateBtn.addEventListener('click', async () => {
         setProfileStatus(why, 'error');
       }
     }
+    console.log('[identity]', JSON.stringify(identity && { name: identity.name, avatarPrefix: identity.avatar?.slice(0, 60), avatarLength: identity.avatar?.length }));
     const { generateClip, normalizeTweetUrl } = await import('./clip.js');
-    try { normalizeTweetUrl(sourcePostUrl); } catch (error) { statusDiv.textContent = error.message; return; }
-    const version = layoutInputs.find(radio => radio.checked)?.value || 'standard';
-    const result = await generateClip({ url: sourcePostUrl, version, identity: standard ? identity : null, signal: controller.signal, onProgress: message => { statusDiv.textContent = message; } });
+    try { normalizeTweetUrl(url); } catch (error) { statusDiv.textContent = error.message; return; }
+    const result = await generateClip({ url, identity, signal: controller.signal, onProgress: message => { statusDiv.textContent = message; } });
     if (objectUrl) URL.revokeObjectURL(objectUrl);
     objectUrl = URL.createObjectURL(result.blob);
     previewVideo.src = objectUrl;

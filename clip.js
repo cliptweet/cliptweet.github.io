@@ -24,7 +24,6 @@ const BANNER_FONT_FAMILY = '-apple-system, BlinkMacSystemFont, "Segoe UI", Robot
 // original 1280px-wide reference.
 const BANNER_SPEC = { standard: { refW: 1280, fontPx: 58, lineHeight: 76, padY: 46 } };
 const MIN_FONT_PX = 18;
-const TEXT_SCALE = 2;
 
 // `minWidth` is the composition floor: a frame narrower than the display size
 // gets upscaled by the browser, and the upscaled banner text is what looked
@@ -65,28 +64,7 @@ export function normalizeTweetUrl(input) {
 
 // ── Text layout ──────────────────────────────────────────────────────────────
 
-const graphemeSegmenter = typeof Intl !== 'undefined' && Intl.Segmenter
-  ? new Intl.Segmenter(undefined, { granularity: 'grapheme' }) : null;
-
-function graphemes(text) {
-  if (graphemeSegmenter) return [...graphemeSegmenter.segment(text)].map(x => x.segment);
-  return Array.from(text);
-}
-
-function isEmojiCluster(cluster) {
-  return /\p{Extended_Pictographic}|\p{Regional_Indicator}|\u20e3|\ufe0f/u.test(cluster);
-}
-
-function emojiCodepoints(cluster) {
-  return [...cluster].map(ch => ch.codePointAt(0).toString(16)).join('-');
-}
-
-function visualWidth(ctx, text, emojiPx) {
-  return graphemes(text).reduce((width, cluster) =>
-    width + (isEmojiCluster(cluster) ? emojiPx : ctx.measureText(cluster).width), 0);
-}
-
-function layoutLines(ctx, text, maxWidth, emojiPx) {
+function layoutLines(ctx, text, maxWidth) {
   const lines = [];
   for (const paragraph of text.split('\n')) {
     if (!paragraph.trim()) { lines.push(''); continue; }
@@ -95,66 +73,12 @@ function layoutLines(ctx, text, maxWidth, emojiPx) {
     // paragraph never renders with a ragged leading gap.
     for (const word of paragraph.split(' ').filter(Boolean)) {
       const test = current ? current + ' ' + word : word;
-      if (current && visualWidth(ctx, test, emojiPx) > maxWidth) { lines.push(current); current = word; }
+      if (current && ctx.measureText(test).width > maxWidth) { lines.push(current); current = word; }
       else current = test;
     }
     if (current) lines.push(current);
   }
   return lines;
-}
-
-async function loadEmojiAssets(lines, size, signal) {
-  const cache = new Map();
-  const clusters = lines.flatMap(line => graphemes(line)).filter(isEmojiCluster);
-  await Promise.all([...new Set(clusters)].map(async cluster => {
-    const codepoints = emojiCodepoints(cluster);
-    const assetUrl = `https://cdn.jsdelivr.net/gh/twitter/twemoji@latest/assets/svg/${codepoints}.svg`;
-    try {
-      const response = await fetch(assetUrl, { mode: 'cors', signal: AbortSignal.any([signal, AbortSignal.timeout(10_000)]) });
-      if (!response.ok) throw new Error(`emoji asset ${response.status}`);
-      const blob = await response.blob();
-      const dataUrl = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      });
-      const image = new Image();
-      image.src = dataUrl;
-      await abortable(image.decode(), AbortSignal.any([signal, AbortSignal.timeout(10_000)]));
-      cache.set(cluster, image);
-    } catch {
-      /* native Canvas fallback */
-    }
-  }));
-  return cache;
-}
-
-function drawVisualLine(ctx, line, centerX, y, maxWidth, emojiPx, assets, middle = false) {
-  const clusters = graphemes(line);
-  const parts = [];
-  for (const cluster of clusters) {
-    if (isEmojiCluster(cluster) || !parts.length || parts.at(-1).emoji) parts.push({ value: cluster, emoji: isEmojiCluster(cluster) });
-    else parts.at(-1).value += cluster;
-  }
-  const width = visualWidth(ctx, line, emojiPx);
-  let x = centerX - width / 2;
-  const previousAlign = ctx.textAlign;
-  ctx.textAlign = 'left';
-  for (const part of parts) {
-    const partWidth = part.emoji ? emojiPx : ctx.measureText(part.value).width;
-    const image = assets.get(part.value);
-    if (image) {
-      ctx.drawImage(image, x, middle ? y - emojiPx / 2 : y, emojiPx, emojiPx);
-    } else if (middle) {
-      ctx.strokeText(part.value, x, y);
-      ctx.fillText(part.value, x, y);
-    } else {
-      ctx.fillText(part.value, x, y);
-    }
-    x += partWidth;
-  }
-  ctx.textAlign = previousAlign;
 }
 
 export function cleanText(text) {
@@ -176,60 +100,112 @@ export function cleanText(text) {
     .trim();
 }
 
-const CONTROL_RE = /[\u0000-\u001f\u007f-\u009f]/g;
-const BIDI_RE = /[\u202a-\u202e\u2066-\u2069]/g;
-function sanitizeDisplayName(value) {
-  const text = String(value || '').replace(CONTROL_RE, '').replace(BIDI_RE, '').replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
-  return Array.from(text).slice(0, 30).join('');
+// ── Display name (identity block) ────────────────────────────────────────────
+
+// Bidi controls can visually reorder the label; C0/C1 controls can break the
+// line box. Both are stripped before the name ever reaches the canvas.
+const BIDI_RE = /[\u202A-\u202E\u2066-\u2069]/g;
+const CONTROL_RE = /[\u0000-\u001F\u007F-\u009F]/g;
+const MAX_NAME_GRAPHEMES = 30;
+
+export function sanitizeDisplayName(input) {
+  const flattened = String(input == null ? '' : input)
+    .replace(CONTROL_RE, ' ')
+    .replace(BIDI_RE, '')
+    .replace(/\r\n?/g, '\n')
+    .replace(/\n/g, ' ')      // a name is a single line
+    .replace(/\s+/g, ' ')    // collapse
+    .trim();
+  if (!flattened) return '';
+  // Grapheme-based so an emoji is never cut in half.
+  if (typeof Intl !== 'undefined' && Intl.Segmenter) {
+    const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+    const out = [];
+    for (const { segment } of segmenter.segment(flattened)) {
+      if (out.length >= MAX_NAME_GRAPHEMES) return out.join('') + '…';
+      out.push(segment);
+    }
+    return out.join('');
+  }
+  return [...flattened].slice(0, MAX_NAME_GRAPHEMES).join('') +
+    (Array.from(flattened).length > MAX_NAME_GRAPHEMES ? '…' : '');
 }
-async function buildIdentityBlock(dataUrl, name, fontPx, maxWidth) {
-  if (!/^data:image\/(?:png|jpeg|webp);base64,/i.test(String(dataUrl || '')) && !/^https:\/\//i.test(String(dataUrl || ''))) return null;
-  const response = await fetch(dataUrl);
-  const bitmap = await createImageBitmap(await response.blob());
-  const diameter = Math.min(Math.round(fontPx * 2.25), bitmap.width, bitmap.height);
-  if (diameter < 2) { bitmap.close(); return null; }
-  const gap = Math.round(diameter * .4), namePx = Math.max(12, Math.round(fontPx * .88));
-  const canvas = document.createElement('canvas'); canvas.width = maxWidth; canvas.height = diameter;
-  const ctx = canvas.getContext('2d'); ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
-  ctx.save(); ctx.beginPath(); ctx.arc(diameter / 2, diameter / 2, diameter / 2, 0, Math.PI * 2); ctx.clip();
-  const scale = Math.max(diameter / bitmap.width, diameter / bitmap.height);
-  const w = bitmap.width * scale, h = bitmap.height * scale;
-  ctx.drawImage(bitmap, (diameter - w) / 2, (diameter - h) / 2, w, h); ctx.restore();
-  ctx.font = `700 ${namePx}px ${BANNER_FONT_FAMILY}`; ctx.fillStyle = '#fff'; ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
-  let label = name; while (label && ctx.measureText(label).width > maxWidth - diameter - gap) label = `${label.slice(0, -1).trim()}…`;
-  ctx.fillText(label, diameter + gap, diameter / 2); return { canvas, diameter, height: diameter, bitmap };
+
+// Builds the avatar + name strip exactly once, before the encoding loop, so the
+// per-frame cost stays a single drawImage of an already-rendered bitmap. The
+// avatar is cover-cropped into a circle at its final size: never upscaled.
+// Decodes the inline avatar the resolver returned. Done in memory rather than
+// with fetch() because the site CSP does not list data: in connect-src, and
+// this avoids a network round trip for a few kilobytes.
+async function decodeAvatarDataUrl(dataUrl) {
+  const match = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(String(dataUrl || '').trim());
+  if (!match) throw new Error('Unsupported profile picture.');
+  const binary = atob(match[2]);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return createImageBitmap(new Blob([bytes], { type: match[1] }));
+}
+
+async function buildIdentityBlock(avatarUrl, label, fontPx, maxWidth) {
+  const bitmap = await decodeAvatarDataUrl(avatarUrl);
+  try {
+    let diameter = Math.round(fontPx * 2.25);
+    if (bitmap.width < diameter) diameter = bitmap.width;   // never upscale
+    const gap = Math.round(diameter * 0.4);                // avatar to name
+    const nameFontPx = Math.max(12, Math.round(fontPx * 0.88));
+
+    // The name is centred with the avatar, so its own width decides the strip.
+    const measurer = document.createElement('canvas').getContext('2d');
+    const weight = fontPx >= 40 ? '600' : '700';
+    measurer.font = `${weight} ${nameFontPx}px ${BANNER_FONT_FAMILY}`;
+    let text = label;
+    if (measurer.measureText(text).width > maxWidth) {
+      // Shrink before truncating, and never let the glyphs overflow the box.
+      while (nameFontPx > 12 && measurer.measureText(text).width > maxWidth) {
+        measurer.font = `${weight} ${nameFontPx}px ${BANNER_FONT_FAMILY}`;
+        nameFontPx -= 1;
+      }
+      if (measurer.measureText(text).width > maxWidth) {
+        while (text.length > 1 && measurer.measureText(text + '…').width > maxWidth) {
+          text = text.slice(0, -1);
+        }
+        text += '…';
+      }
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = maxWidth;
+    canvas.height = diameter;
+    const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+
+    // Cover crop keeps the aspect ratio and fills the circle.
+    const side = Math.min(bitmap.width, bitmap.height);
+    const sx = (bitmap.width - side) / 2;
+    const sy = (bitmap.height - side) / 2;
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(diameter / 2, diameter / 2, diameter / 2, 0, Math.PI * 2);
+    ctx.clip();
+    ctx.drawImage(bitmap, sx, sy, side, side, 0, 0, diameter, diameter);
+    ctx.restore();
+
+    ctx.font = `${weight} ${nameFontPx}px ${BANNER_FONT_FAMILY}`;
+    ctx.fillStyle = BANNER_FG;
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillText(text, diameter + gap, diameter / 2);
+
+    return { canvas, diameter, height: diameter, bitmap };
+  } catch (error) {
+    bitmap.close?.();
+    throw error;
+  }
 }
 
 // ── Main pipeline ────────────────────────────────────────────────────────────
 
-function abortable(promise, signal) {
-  return new Promise((resolve, reject) => {
-    const abort = () => reject(signal.reason || new DOMException('Generation canceled.', 'AbortError'));
-    promise.then(resolve, reject).finally(() => signal.removeEventListener('abort', abort));
-    if (signal.aborted) return abort();
-    signal.addEventListener('abort', abort, { once: true });
-  });
-}
-
-export async function generateClip(options) {
-  const controller = new AbortController();
-  const cancel = () => controller.abort(options.signal.reason);
-  options.signal?.addEventListener('abort', cancel, { once: true });
-  if (options.signal?.aborted) cancel();
-  const timer = setTimeout(() => controller.abort(new Error('Generation timed out. Try a shorter video.')), 600_000);
-  try { return await abortable(generateClipInternal({ ...options, signal: controller.signal,
-    onProgress: (...args) => { if (!controller.signal.aborted) options.onProgress?.(...args); },
-  }), controller.signal); }
-  catch (error) {
-    if (error.name === 'TimeoutError') throw new Error('Video request timed out. Check your connection and try again.');
-    throw error;
-  }
-  finally { clearTimeout(timer); options.signal?.removeEventListener('abort', cancel); }
-}
-
-async function generateClipInternal({ url, version = 'standard', identity, onProgress, signal }) {
-  if (!['standard', 'reel'].includes(version)) throw new Error('Choose a supported video layout.');
-  const isReel = version === 'reel';
+export async function generateClip({ url, identity, onProgress, signal }) {
   if (typeof VideoEncoder === 'undefined') {
     throw new Error('This browser cannot encode video. Update to a recent Chrome, Edge or Safari 16.4+.');
   }
@@ -238,14 +214,24 @@ async function generateClipInternal({ url, version = 'standard', identity, onPro
   onProgress?.('Looking up the post...', 0.02);
 
   const apiBase = String(globalThis.CLIPTWEET_API_BASE || '').replace(/\/$/, '');
-  const res = await fetch(`${apiBase}/api/resolve`, {
+  const resolveUrl = `${apiBase}/api/resolve`;
+  const resolveOptions = {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     // Send the canonical URL, never the raw paste: the worker only accepts
     // fully-formed https X/Twitter links.
     body: JSON.stringify({ url: canonical }),
-    signal: AbortSignal.any([signal, AbortSignal.timeout(30_000)]),
-  });
+    signal,
+  };
+  console.log('[fetch] START', { url: resolveUrl, method: resolveOptions.method, origin: location.origin, apiBase: globalThis.CLIPTWEET_API_BASE });
+  let res;
+  try {
+    res = await fetch(resolveUrl, resolveOptions);
+    console.log('[fetch] OK', { url: resolveUrl, status: res.status, ok: res.ok, acao: res.headers.get('access-control-allow-origin') });
+  } catch (err) {
+    console.error('[fetch] FAIL', { url: resolveUrl, errorName: err.name, errorMessage: err.message, stack: err.stack });
+    throw err;
+  }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || 'Could not read that post.');
   if (statusId && data.id && data.id !== statusId) {
@@ -266,7 +252,7 @@ async function generateClipInternal({ url, version = 'standard', identity, onPro
   // Keep generated files within 20 MB.
   const totalKbps = (MAX_BYTES * 8 * HEADROOM) / durationSec / 1000;
   const audioKbps = profile.audioKbps;
-  let videoKbps = Math.floor(Math.min(totalKbps - audioKbps, profile.maxVideoKbps));
+  const videoKbps = Math.floor(Math.min(totalKbps - audioKbps, profile.maxVideoKbps));
   if (videoKbps < 60) {
     throw new Error('That video is too long to fit in the 20 MB limit at a usable quality.');
   }
@@ -276,22 +262,17 @@ async function generateClipInternal({ url, version = 'standard', identity, onPro
   // X's CDN answers 403 to any request that carries a Referer header, so the
   // media fetch must not send one. This is a hotlink-protection rule, not a
   // CORS rule — CORS itself is open and the request is cross-origin either way.
-  const source = new UrlSource(variant.url, {
-    requestInit: { referrerPolicy: 'no-referrer' },
-    getRetryDelay: attempts => attempts < 3 ? 1 : null,
-  });
+  const source = new UrlSource(variant.url, { requestInit: { referrerPolicy: 'no-referrer' } });
   const input = new Input({ formats: ALL_FORMATS, source });
-  let conversion;
-  const stop = () => { void conversion?.cancel().catch(() => {}); try { input.dispose(); } catch {} };
-  signal.addEventListener('abort', stop, { once: true });
 
   try {
-    const videoTrack = await abortable(input.getPrimaryVideoTrack(), AbortSignal.any([signal, AbortSignal.timeout(45_000)]));
+    const videoTrack = await input.getPrimaryVideoTrack();
     if (!videoTrack) throw new Error('That post has no video track.');
 
-    const [srcW, srcH] = await abortable(Promise.all([videoTrack.getDisplayWidth(), videoTrack.getDisplayHeight()]), AbortSignal.any([signal, AbortSignal.timeout(45_000)]));
+    const srcW = await videoTrack.getDisplayWidth();
+    const srcH = await videoTrack.getDisplayHeight();
     // Even width/height keeps H.264 encoders happy.
-    const outW = Math.max(2, isReel ? srcW : Math.min(profile.width, srcW)) & ~1;
+    const outW = Math.max(profile.minWidth, Math.min(profile.width, srcW)) & ~1;
     const outH = Math.max(2, Math.round(outW * (srcH / srcW)) & ~1);
 
     // Banner metrics scale with the frame, so the text keeps the same share of
@@ -311,42 +292,35 @@ async function generateClipInternal({ url, version = 'standard', identity, onPro
     // The banner renders the post's own prose only: links, t.co codes and
     // leading mentions are stripped before layout.
     const bannerText = cleanText(data.text);
-    let lines = bannerText ? layoutLines(measurer, bannerText, outW - padX * 2, fontPx) : [];
-    let reelFontPx = Math.max(14, Math.round(outW * 0.05));
-    if (isReel) {
-      for (;;) {
-        measurer.font = `800 ${reelFontPx}px ${BANNER_FONT_FAMILY}`;
-        lines = bannerText ? layoutLines(measurer, bannerText, outW * 0.9, reelFontPx) : [];
-        if (reelFontPx <= 14 || lines.length * reelFontPx * 1.2 <= outH / 6) break;
-        reelFontPx--;
-      }
-    }
+    const lines = bannerText ? layoutLines(measurer, bannerText, outW - padX * 2) : [];
     // A post that is nothing but a link yields no prose, so no banner at all
     // rather than an empty black bar.
-    const identityName = !isReel ? sanitizeDisplayName(identity?.name) : '';
-    const identityBlock = identityName && identity?.avatar ? await buildIdentityBlock(identity.avatar, identityName, fontPx, outW - padX * 2) : null;
-    const identityGap = identityBlock ? Math.round(lineHeight * .5) : 0;
-    const textTop = identityBlock ? padY + identityBlock.height + identityGap : padY;
-    const bannerH = !isReel && (lines.length || identityBlock) ? Math.ceil(padY * 2 + (identityBlock ? identityBlock.height + identityGap : 0) + lines.length * lineHeight) : 0;
+    // Optional identity block above the post text. Without it every added figure
+    // is 0, so the plain Standard layout and its height are untouched.
+    const name = sanitizeDisplayName(identity?.name);
+    const hasIdentity = !!(name && identity?.avatar);
+    const identityBlock = hasIdentity
+      ? await buildIdentityBlock(identity.avatar, name, fontPx, outW - padX * 2)
+      : null;
+    const identityH = identityBlock ? identityBlock.height : 0;
+    const identityTop = identityBlock ? padY : 0;
+    const identityTextGap = identityBlock ? Math.round(lineHeight * 0.5) : 0;
+
+    const textTop = identityTop + identityH + identityTextGap;
+    const rawBannerH = (lines.length || identityBlock)
+      ? Math.ceil(padY * 2 + textTop + lines.length * lineHeight)
+      : 0;
+    // With an identity block the total height must stay even for H.264/yuv420.
+    // Without one the original value is kept exactly, so the plain Standard
+    // banner height is unchanged.
+    const bannerH = identityBlock ? ((rawBannerH & ~1) || 2) : rawBannerH;
     const totalH = bannerH + outH;
-    const reelStep = reelFontPx * 1.2;
-    const reelStartY = Math.max(reelStep / 2, Math.min(outH * 5 / 6 - (lines.length - 1) * reelStep / 2, outH - (lines.length - 0.5) * reelStep));
-    const reelStrokeWidth = Math.max(2, reelFontPx * 0.14);
-    const reelMetrics = isReel ? lines.map(line => measurer.measureText(line)) : [];
-    const reelAscent = Math.max(reelFontPx, ...reelMetrics.map(metric => metric.actualBoundingBoxAscent || 0));
-    const reelDescent = Math.max(reelFontPx * 0.3, ...reelMetrics.map(metric => metric.actualBoundingBoxDescent || 0));
-    const reelPad = Math.ceil(reelStrokeWidth / 2 + 2);
-    const reelTop = isReel ? Math.max(0, Math.floor(reelStartY - reelAscent - reelPad)) : 0;
-    const reelBottom = isReel ? Math.min(outH, Math.ceil(reelStartY + Math.max(0, lines.length - 1) * reelStep + reelDescent + reelPad)) : 0;
-    const reelLayerH = Math.max(1, reelBottom - reelTop);
-    const emojiAssets = await abortable(loadEmojiAssets(lines, isReel ? reelFontPx : fontPx, signal), signal);
 
     // Draw the banner once into a reusable offscreen bitmap.
     const banner = document.createElement('canvas');
-    banner.width = outW * TEXT_SCALE; banner.height = (isReel ? reelLayerH : bannerH) * TEXT_SCALE;
+    banner.width = outW; banner.height = bannerH;
     const bctx = banner.getContext('2d');
-    bctx.scale(TEXT_SCALE, TEXT_SCALE);
-    if (!isReel) { bctx.fillStyle = BANNER_BG; bctx.fillRect(0, 0, outW, bannerH); if (identityBlock) bctx.drawImage(identityBlock.canvas, padX, padY); }
+    bctx.fillStyle = BANNER_BG; bctx.fillRect(0, 0, outW, bannerH);
     bctx.fillStyle = BANNER_FG;
     bctx.font = font;
     bctx.textAlign = 'center'; bctx.textBaseline = 'top';
@@ -355,28 +329,17 @@ async function generateClipInternal({ url, version = 'standard', identity, onPro
     bctx.shadowColor = 'rgba(0,0,0,0.45)';
     bctx.shadowBlur = Math.max(1, fontPx / 10);
     bctx.shadowOffsetY = Math.max(1, Math.round(fontPx / 24));
-    if (isReel) {
-      bctx.font = `800 ${reelFontPx}px ${BANNER_FONT_FAMILY}`;
-      bctx.textBaseline = 'middle';
-      bctx.shadowColor = 'transparent';
-      bctx.strokeStyle = '#000';
-      bctx.lineJoin = 'round';
-      bctx.lineWidth = reelStrokeWidth;
-      lines.forEach((line, i) => {
-        const y = reelStartY - reelTop + i * reelStep;
-        drawVisualLine(bctx, line, outW / 2, y, outW * 0.9, reelFontPx, emojiAssets, true);
-      });
-    } else lines.forEach((line, i) => drawVisualLine(bctx, line, outW / 2, textTop + i * lineHeight, outW - padX * 2, fontPx, emojiAssets));
-    identityBlock?.bitmap.close?.();
+    if (identityBlock) bctx.drawImage(identityBlock.canvas, padX, identityTop);
+    lines.forEach((line, i) => bctx.fillText(line, outW / 2, textTop + i * lineHeight));
     bctx.shadowColor = 'transparent';
     bctx.shadowBlur = 0;
     bctx.shadowOffsetY = 0;
+    // The bitmap is only needed to build the pre-rendered circle.
+    identityBlock?.bitmap.close?.();
 
     const frame = document.createElement('canvas');
     frame.width = outW; frame.height = totalH;
     const fctx = frame.getContext('2d', { alpha: false });
-    fctx.imageSmoothingEnabled = true;
-    fctx.imageSmoothingQuality = 'high';
 
     onProgress?.('Encoding your clip...', 0.15);
 
@@ -387,17 +350,15 @@ async function generateClipInternal({ url, version = 'standard', identity, onPro
     // unencodable on this device) the conversion still "succeeds" and hands the
     // user an audio-only file. Require a video track in the output, and fall
     // back through the remaining codecs before giving up.
-    let output;
-    for (let sizeAttempt = 0; sizeAttempt < 2; sizeAttempt++) {
-    conversion = undefined;
+    let output, conversion;
     for (const codec of codecOrder) {
       let encodable = false;
-      try { encodable = await abortable(canEncodeVideo(codec, { width: outW, height: totalH }), AbortSignal.any([signal, AbortSignal.timeout(45_000)])); }
+      try { encodable = await canEncodeVideo(codec, { width: outW, height: totalH }); }
       catch { encodable = false; }
       if (!encodable) continue;
 
       const candidateOutput = new Output({ format: new Mp4OutputFormat(), target: new BufferTarget() });
-      const attempt = await abortable(Conversion.init({
+      const attempt = await Conversion.init({
         input, output: candidateOutput,
         video: {
           codec,
@@ -406,11 +367,10 @@ async function generateClipInternal({ url, version = 'standard', identity, onPro
           // output size, so any automatic resize stage would rescale the banner.
           quality: new Quality({ bitrate: Math.round(videoKbps * 1000) }),
           process: (sample) => {
-            if (!isReel && bannerH) fctx.drawImage(banner, 0, 0, outW, bannerH);
+            fctx.drawImage(banner, 0, 0);
             // Explicit size: the video is scaled to the final frame, so the
             // banner above is never resampled and the text stays crisp.
             sample.draw(fctx, 0, bannerH, outW, outH);
-            if (isReel && lines.length) fctx.drawImage(banner, 0, reelTop, outW, reelLayerH);
             return frame;
           },
           processedWidth: outW,
@@ -419,7 +379,7 @@ async function generateClipInternal({ url, version = 'standard', identity, onPro
         // No audio options: the X source is already AAC, so Mediabunny copies
         // the track untouched. Forcing a transcode here silently dropped audio
         // on devices without an encoder for the source's channel/rate pairing.
-      }), AbortSignal.any([signal, AbortSignal.timeout(45_000)]));
+      });
 
       const discarded = attempt.discardedTracks.map((d) => `${d.track.type}:${d.reason}`);
       if (discarded.length) console.warn(`clip: discarded tracks (${codec}) — ${discarded.join(', ')}`);
@@ -436,43 +396,18 @@ async function generateClipInternal({ url, version = 'standard', identity, onPro
       throw new Error('This device could not encode the video track. Try Chrome, Edge or Safari 16.4+ on a computer.');
     }
 
-    let lastProgress = performance.now();
-    let previousProgress = -1;
-    const stallController = new AbortController();
-    conversion.onProgress = (p) => {
-      if (p > previousProgress) { lastProgress = performance.now(); previousProgress = p; }
-      onProgress?.(`${sizeAttempt ? 'Fitting clip to 20 MB' : 'Encoding your clip'}... ${Math.round(p * 100)}%`, 0.15 + p * 0.8);
-    };
-    const stalled = setInterval(() => {
-      if (performance.now() - lastProgress > 60_000) {
-        stallController.abort(new Error('Video processing stopped responding. Try again or use a shorter video.'));
-        stop();
-      }
-    }, 5000);
-    try { await abortable(conversion.execute(), AbortSignal.any([signal, stallController.signal])); }
-    catch (error) {
-      if (performance.now() - lastProgress > 60_000) throw new Error('Video processing stopped responding. Try again or use a shorter video.');
-      throw error;
-    } finally { clearInterval(stalled); }
+    conversion.onProgress = (p) => onProgress?.('Encoding your clip...', 0.15 + p * 0.8);
+    await conversion.execute(signal ? { pauseSignal: signal } : undefined);
 
     const buffer = output.target.buffer;
     const blob = new Blob([buffer], { type: 'video/mp4' });
 
     // Safety net: never expose an oversized result.
     if (blob.size > MAX_BYTES) {
-      if (sizeAttempt === 0) {
-        console.info('clip: fitting oversized VBR output', { bytes: blob.size, videoKbps, durationSec });
-        videoKbps = Math.max(60, Math.floor((videoKbps + audioKbps) * MAX_BYTES / blob.size * 0.85 - audioKbps));
-        onProgress?.('Fitting clip to the 20 MB download limit...', 0.15);
-        continue;
-      }
       throw new Error('That video is too long to fit in the 20 MB limit. Try a shorter post.');
     }
     return { blob, text: bannerText, lines, author: data.author, handle: data.handle };
-    }
   } finally {
-    signal.removeEventListener('abort', stop);
-    void conversion?.cancel().catch(() => {});
     try { input.dispose(); } catch { /* already gone */ }
   }
 }
