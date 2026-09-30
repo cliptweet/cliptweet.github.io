@@ -8,6 +8,7 @@ const adNotice = document.getElementById('adNotice');
 const adNoticeClose = document.getElementById('adNoticeClose');
 let generating = false;
 let objectUrl;
+const layoutInputs = Array.from(document.querySelectorAll('input[name="version"]'));
 
 try { if (sessionStorage.getItem('cliptweet-ad-notice-dismissed') === '1') adNotice.hidden = true; } catch {}
 adNoticeClose.addEventListener('click', () => {
@@ -19,6 +20,7 @@ function setBusy(value) {
   generating = value;
   generateBtn.disabled = value;
   input.disabled = value;
+  layoutInputs.forEach(radio => { radio.disabled = value; });
 }
 
 generateBtn.addEventListener('click', async () => {
@@ -32,7 +34,8 @@ generateBtn.addEventListener('click', async () => {
   try {
     const { generateClip, normalizeTweetUrl } = await import('./clip.js');
     try { normalizeTweetUrl(url); } catch (error) { statusDiv.textContent = error.message; return; }
-    const result = await generateClip({ url, signal: controller.signal, onProgress: message => { statusDiv.textContent = message; } });
+    const version = layoutInputs.find(radio => radio.checked)?.value || 'standard';
+    const result = await generateClip({ url, version, signal: controller.signal, onProgress: message => { statusDiv.textContent = message; } });
     if (objectUrl) URL.revokeObjectURL(objectUrl);
     objectUrl = URL.createObjectURL(result.blob);
     previewVideo.src = objectUrl;

@@ -102,7 +102,9 @@ export function cleanText(text) {
 
 // ── Main pipeline ────────────────────────────────────────────────────────────
 
-export async function generateClip({ url, onProgress, signal }) {
+export async function generateClip({ url, version = 'standard', onProgress, signal }) {
+  if (!['standard', 'reel'].includes(version)) throw new Error('Choose a supported video layout.');
+  const isReel = version === 'reel';
   if (typeof VideoEncoder === 'undefined') {
     throw new Error('This browser cannot encode video. Update to a recent Chrome, Edge or Safari 16.4+.');
   }
@@ -159,7 +161,7 @@ export async function generateClip({ url, onProgress, signal }) {
     const srcW = await videoTrack.getDisplayWidth();
     const srcH = await videoTrack.getDisplayHeight();
     // Even width/height keeps H.264 encoders happy.
-    const outW = Math.max(profile.minWidth, Math.min(profile.width, srcW)) & ~1;
+    const outW = Math.max(2, isReel ? srcW : Math.min(profile.width, srcW)) & ~1;
     const outH = Math.max(2, Math.round(outW * (srcH / srcW)) & ~1);
 
     // Banner metrics scale with the frame, so the text keeps the same share of
@@ -179,17 +181,26 @@ export async function generateClip({ url, onProgress, signal }) {
     // The banner renders the post's own prose only: links, t.co codes and
     // leading mentions are stripped before layout.
     const bannerText = cleanText(data.text);
-    const lines = bannerText ? layoutLines(measurer, bannerText, outW - padX * 2) : [];
+    let lines = bannerText ? layoutLines(measurer, bannerText, outW - padX * 2) : [];
+    let reelFontPx = Math.max(14, Math.round(outW * 0.05));
+    if (isReel) {
+      for (;;) {
+        measurer.font = `400 ${reelFontPx}px ${BANNER_FONT_FAMILY}`;
+        lines = bannerText ? layoutLines(measurer, bannerText, outW * 0.9) : [];
+        if (reelFontPx <= 14 || lines.length * reelFontPx * 1.2 <= outH / 6) break;
+        reelFontPx--;
+      }
+    }
     // A post that is nothing but a link yields no prose, so no banner at all
     // rather than an empty black bar.
-    const bannerH = lines.length ? Math.ceil(padY * 2 + lines.length * lineHeight) : 0;
+    const bannerH = !isReel && lines.length ? Math.ceil(padY * 2 + lines.length * lineHeight) : 0;
     const totalH = bannerH + outH;
 
     // Draw the banner once into a reusable offscreen bitmap.
     const banner = document.createElement('canvas');
-    banner.width = outW; banner.height = bannerH;
+    banner.width = outW; banner.height = isReel ? outH : bannerH;
     const bctx = banner.getContext('2d');
-    bctx.fillStyle = BANNER_BG; bctx.fillRect(0, 0, outW, bannerH);
+    if (!isReel) { bctx.fillStyle = BANNER_BG; bctx.fillRect(0, 0, outW, bannerH); }
     bctx.fillStyle = BANNER_FG;
     bctx.font = font;
     bctx.textAlign = 'center'; bctx.textBaseline = 'top';
@@ -198,7 +209,20 @@ export async function generateClip({ url, onProgress, signal }) {
     bctx.shadowColor = 'rgba(0,0,0,0.45)';
     bctx.shadowBlur = Math.max(1, fontPx / 10);
     bctx.shadowOffsetY = Math.max(1, Math.round(fontPx / 24));
-    lines.forEach((line, i) => bctx.fillText(line, outW / 2, padY + i * lineHeight));
+    if (isReel) {
+      bctx.font = `400 ${reelFontPx}px ${BANNER_FONT_FAMILY}`;
+      bctx.textBaseline = 'middle';
+      bctx.shadowColor = 'transparent';
+      bctx.strokeStyle = '#000';
+      bctx.lineJoin = 'round';
+      bctx.lineWidth = Math.max(2, reelFontPx * 0.08);
+      const step = reelFontPx * 1.2;
+      const startY = Math.max(step / 2, Math.min(outH * 5 / 6 - (lines.length - 1) * step / 2, outH - (lines.length - 0.5) * step));
+      lines.forEach((line, i) => {
+        bctx.strokeText(line, outW / 2, startY + i * step, outW * 0.9);
+        bctx.fillText(line, outW / 2, startY + i * step, outW * 0.9);
+      });
+    } else lines.forEach((line, i) => bctx.fillText(line, outW / 2, padY + i * lineHeight));
     bctx.shadowColor = 'transparent';
     bctx.shadowBlur = 0;
     bctx.shadowOffsetY = 0;
@@ -233,10 +257,11 @@ export async function generateClip({ url, onProgress, signal }) {
           // output size, so any automatic resize stage would rescale the banner.
           quality: new Quality({ bitrate: Math.round(videoKbps * 1000) }),
           process: (sample) => {
-            fctx.drawImage(banner, 0, 0);
+            if (!isReel) fctx.drawImage(banner, 0, 0);
             // Explicit size: the video is scaled to the final frame, so the
             // banner above is never resampled and the text stays crisp.
             sample.draw(fctx, 0, bannerH, outW, outH);
+            if (isReel) fctx.drawImage(banner, 0, 0);
             return frame;
           },
           processedWidth: outW,

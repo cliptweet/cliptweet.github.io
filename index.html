@@ -48,6 +48,11 @@
     .ad-notice button { border: 0; background: transparent; color: #69bdff; cursor: pointer; padding: 0; white-space: nowrap; }
     .ad-notice[hidden] { display: none; }
     .form-group { margin-bottom: 1.25rem; }
+    .version-group { display: flex; gap: 0.5rem; border: 0; padding: 0; margin: 1rem 0; }
+    .version-group legend { color: #8899a6; margin-bottom: 0.5rem; }
+    .version-group label { flex: 1; padding: 0.65rem; border: 1px solid #253341; border-radius: 10px; cursor: pointer; }
+    .version-group small { display: block; margin-top: 0.4rem; }
+    .version-group input { accent-color: #1d9bf0; }
     label { display: block; font-size: 0.9rem; margin-bottom: 0.5rem; color: #8899a6; }
     /* Styled by id, not by type: the field is type="text" so that pasted links
        without a scheme are accepted instead of being blocked by native URL
@@ -121,6 +126,7 @@
       <input type="text" inputmode="url" id="tweetUrl" placeholder="https://x.com/user/status/123456789" autocomplete="off" autocapitalize="off" spellcheck="false">
     </div>
     <p class="input-hint" id="urlHint">Paste the link to the X/Twitter post that contains the video or GIF.</p>
+    <fieldset class="version-group"><legend>Video layout</legend><label><input type="radio" name="version" value="standard" checked> Standard<small>Text above the video</small></label><label><input type="radio" name="version" value="reel"> Reel<small>Text over the video</small></label></fieldset>
     <button id="generateBtn" class="btn-primary">Generate Clip</button>
     <div id="status" class="status" role="status" aria-live="polite"></div>
 
