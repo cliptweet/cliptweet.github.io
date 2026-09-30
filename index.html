@@ -6,7 +6,7 @@
   <meta name="referrer" content="no-referrer">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Twitter / X Video Downloader with Post Text — ClipTweet</title>
-  <meta name="description" content="Download X and Twitter videos as MP4 clips with the post text included. Free, no signup. Choose Low or High quality and create your clip in your browser.">
+  <meta name="description" content="Download X and Twitter videos as MP4 clips with the post text included. Free, no signup.">
   <link rel="canonical" href="https://cliptweet.github.io/">
   <meta property="og:type" content="website">
   <meta property="og:title" content="ClipTweet — Twitter / X Video Downloader">
@@ -19,7 +19,7 @@
     * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
 
     /* Right-click menu lock and global selection lock */
-    body, .card, .card > *, .status, .quality-selector, .quality-options, .quality-pill, h1, label, .download-btn {
+    body, .card, .card > *, .status, h1, label, .download-btn {
       -webkit-user-select: none;
       -moz-user-select: none;
       -ms-user-select: none;
@@ -71,36 +71,10 @@
     .preview-container { margin-top: 1.5rem; display: none; }
     .preview-container.active { display: block; }
     .preview-video { width: 100%; border-radius: 12px; border: 1px solid #253341; }
-    .download-section { margin-top: 1.25rem; display: none; }
-    .download-section.active { display: flex; justify-content: center; }
+    .download-section { margin-top: 1.25rem; display: flex; justify-content: center; }
     .download-btn { width: auto; min-width: 220px; padding: 0.8rem 1.5rem; font-size: 0.95rem; }
 
-    /* Quality selector */
-    .quality-selector { margin: 1.5rem 0 1rem; display: flex; flex-direction: column; gap: 0.5rem; }
     .input-hint { font-size: 0.8rem; color: #8899a6; margin: 0.45rem 0 0; line-height: 1.35; }
-    .quality-label { font-size: 0.85rem; color: #8899a6; font-weight: 500; }
-    .quality-options { display: flex; gap: 0.5rem; flex-wrap: wrap; }
-    .quality-pill {
-      padding: 0.5rem 1rem; background: #253341; border: 1px solid #253341;
-      border-radius: 9999px; color: #ffffff; font-size: 0.85rem; font-weight: 600;
-      cursor: pointer; transition: all 0.2s ease; user-select: none;
-    }
-    .quality-pill:hover { border-color: #1d9bf0; }
-    input[type="radio"] { display: none; }
-    input[type="radio"]:checked + .quality-pill { background: #1d9bf0; border-color: #1d9bf0; color: #ffffff; }
-
-    /* Ad placeholder overlay */
-    .ad-placeholder-overlay {
-      position: fixed; inset: 0; background: rgba(0,0,0,0.85);
-      display: none; align-items: center; justify-content: center;
-      z-index: 100; cursor: pointer;
-    }
-    .ad-placeholder-overlay.active { display: flex; }
-    .ad-placeholder-box {
-      background: #192734; border: 2px dashed #1d9bf0; border-radius: 16px;
-      padding: 2rem 3rem; text-align: center; max-width: 90vw;
-    }
-    .ad-placeholder-box h3 { margin: 0 0 0.5rem; color: #1d9bf0; font-size: 1.2rem; }
     .ad-placeholder-box p { margin: 0; color: #8899a6; font-size: 0.9rem; }
     .ad-placeholder-close {
       margin-top: 1rem; background: #1d9bf0; color: #fff; border: none;
@@ -159,12 +133,6 @@
     }
 
     /* The access wall stays separate from the inert application content. */
-    #adblockWall[hidden] { display: none; }
-    #adblockWall {
-      position: fixed; inset: 0; z-index: 2147483647; padding: 1.5rem;
-      background: rgba(21,32,43,0.75); display: flex; align-items: center; justify-content: center;
-      overflow-y: auto;
-    }
     .access-message { max-width: 420px; padding: 1.25rem; border-radius: 16px; background: #192734; }
     .access-message h2 { color: #1d9bf0; }
     .access-message p { color: #b9c4cf; line-height: 1.6; }
@@ -174,60 +142,17 @@
 </head>
 <body>
   <div id="appContent" style="display:contents">
-  <aside class="ad-slot ad-slot--left" aria-hidden="true">
-    <div class="ad-slot__inner">
-      <span class="ad-slot__label">Ad space</span>
-      <!-- <ins class="adsbygoogle" data-ad-client="ca-pub-XXXXXXXXXXXXXXXX" data-ad-slot="XXXXXXXXXX" data-ad-format="vertical"></ins> -->
-    </div>
-  </aside>
-  <aside class="ad-slot ad-slot--right" aria-hidden="true">
-    <div class="ad-slot__inner">
-      <span class="ad-slot__label">Ad space</span>
-      <!-- <ins class="adsbygoogle" data-ad-client="ca-pub-XXXXXXXXXXXXXXXX" data-ad-slot="XXXXXXXXXX" data-ad-format="vertical"></ins> -->
-    </div>
-  </aside>
-
-  <div id="policyOverlay" class="policy-overlay">
-    <div class="policy-modal">
-      <p>Ads help keep ClipTweet free for everyone. Please allow them when using the service.</p>
-      <p><a href="#terms">Terms</a> · <a href="#privacy">Privacy</a></p>
-      <div class="policy-actions">
-        <button id="policyAccept">Continue</button>
-      </div>
-    </div>
-  </div>
-
   <main>
   <div class="card">
     <h1>ClipTweet — X / Twitter Video Downloader</h1>
-    <p class="tagline">Turn an X/Twitter post into a single video with the tweet text and video combined. Choose your quality and download it in seconds.</p>
+    <p class="tagline">Paste an X/Twitter post link and get an MP4 with the post text above its video, ready to download.</p>
     <div class="form-group">
       <label for="tweetUrl">Tweet or Video URL:</label>
       <input type="text" inputmode="url" id="tweetUrl" placeholder="https://x.com/user/status/123456789" autocomplete="off" autocapitalize="off" spellcheck="false">
     </div>
     <p class="input-hint" id="urlHint">Paste the link to the X/Twitter post that contains the video or GIF.</p>
-    <div class="quality-selector">
-      <label class="quality-label">Quality:</label>
-      <div class="quality-options">
-        <input type="radio" name="quality" value="low" id="q-low" checked>
-        <label for="q-low" class="quality-pill">Low quality</label>
-        <input type="radio" name="quality" value="high" id="q-high">
-        <label for="q-high" class="quality-pill">📺 High quality</label>
-      </div>
-    </div>
     <button id="generateBtn" class="btn-primary">Generate Clip</button>
-    <div id="adWarning" class="ad-warning" style="display:none; margin-top:0.6rem; font-size:0.8rem; color:#1d9bf0; text-align:center; line-height:1.3;">
-      📺 An ad will load before generating your clip.
-    </div>
     <div id="status" class="status" role="status" aria-live="polite"></div>
-
-    <div id="adPlaceholderOverlay" class="ad-placeholder-overlay">
-      <div class="ad-placeholder-box">
-        <h3>Ad Placeholder</h3>
-        <p>Click anywhere to simulate ad view</p>
-        <button class="ad-placeholder-close">Close ad</button>
-      </div>
-    </div>
 
     <div id="previewContainer" class="preview-container">
       <video id="previewVideo" class="preview-video" controls muted playsinline></video>
@@ -241,10 +166,10 @@
     <h2>Download Twitter videos with the post text</h2>
     <p>ClipTweet turns a public X (Twitter) post into an MP4 with its text above the video. It is a free Twitter video downloader for making a clip that keeps the post's context, rather than a download of the unchanged source video. No account or installation is required.</p>
     <h2>How to download an X video as an MP4</h2>
-    <ol><li>Copy the link to a public X or Twitter post containing a video.</li><li>Paste it above, choose Low or High quality, and select Generate Clip.</li><li>Preview your clip and select Download MP4.</li></ol>
-    <p>Low quality creates a smaller file. High quality preserves more detail. Video processing happens on your device, so speed depends on your browser and hardware. Keep this tab open until the clip is ready.</p>
+    <ol><li>Copy the link to a public X or Twitter post containing a video.</li><li>Paste it above and select Generate Clip.</li><li>Preview your clip and select Download MP4.</li></ol>
+    <p>ClipTweet processes the video in your browser. Keep this tab open until the clip is ready.</p>
     <h2>Frequently asked questions</h2>
-    <h3>Are downloads free?</h3><p>Yes. Both quality options are free. Advertising is intended to support the service.</p>
+    <h3>Are downloads free?</h3><p>Yes. ClipTweet is free to use.</p>
     <h3>Which posts work?</h3><p>Public posts with a playable video and duration metadata. Private, protected or deleted posts cannot be downloaded. Some animated GIF posts lack duration metadata and are not supported.</p>
     <h3>What are the limits?</h3><p>Videos must be no longer than 10 minutes; the generated MP4 must fit within 20 MB. Some devices or codecs are unsupported. Use an up-to-date browser with WebCodecs support.</p>
     <h3>Does ClipTweet store my videos?</h3><p>No. Your browser downloads media directly from X's video CDN and creates the output locally. Our resolver only retrieves post metadata.</p>
@@ -252,24 +177,11 @@
     <p>Download and reuse only content you own or have permission to use. You remain responsible for copyright, privacy and applicable platform rules. ClipTweet is independent of X Corp. Availability and compatibility are not guaranteed. Automated bulk extraction and attempts to bypass service limits are not permitted.</p>
     <h2 id="privacy">Privacy</h2>
     <p>ClipTweet sends the post link to its Cloudflare Worker to retrieve public metadata from X. Your browser contacts X's video CDN and jsDelivr for the video-processing library. These providers receive connection information such as your IP address. Generated videos remain on your device; ClipTweet does not upload or store them.</p>
-    <p>We use local storage to remember dismissal of this notice. Cloudflare processes requests and may retain operational logs. The ad availability check contacts Google; no live ad slots are configured yet. This notice is not consent to personalized advertising. Before personalized ads are enabled, appropriate consent controls and updated disclosures are required. See <a href="https://policies.google.com/technologies/ads" rel="noopener noreferrer">Google's advertising information</a>.</p>
+    <p>Cloudflare processes resolver requests and may retain operational logs. Generated videos remain on your device.</p>
   </section>
   </main>
   <footer><a href="#terms">Terms</a> · <a href="#privacy">Privacy</a> · ClipTweet is not affiliated with X / Twitter.</footer>
   </div>
-  <div id="adblockWall" role="dialog" aria-modal="true" aria-labelledby="adblockTitle" aria-describedby="adblockHelp" hidden>
-    <section class="access-message">
-      <h2 id="adblockTitle">Ad blocker detected</h2>
-      <div id="adblockHelp">
-        <p>Ads help keep ClipTweet free. Allow ads for this site, then reload to continue.</p>
-        <p>Using Brave? Click the lion icon in the address bar and turn Shields off for this site.</p>
-        <p>If you do not use an ad blocker, check your connection and whether your network blocks Google ads.</p>
-      </div>
-      <button id="adblockReload" class="btn-primary">I've disabled it — Check again</button>
-    </section>
-  </div>
-
-  <script src="/ad-check.js"></script>
   <script src="/config.js"></script>
   <script src="/app.js"></script>
 

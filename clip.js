@@ -20,22 +20,15 @@ const BANNER_FONT_FAMILY = '-apple-system, BlinkMacSystemFont, "Segoe UI", Robot
 // Banner spec. Each tier pins the font to its own reference width so the text
 // keeps a constant share of the frame no matter how wide the frame ends up:
 // `fontPx / outW` is the same for every width, so raising the composition
-// floor to sharpen the text does not shrink it. High is unchanged from the
-// original 1280px-wide reference. Low reproduces the 320px-era proportions,
-// where the 18px minimum used to inflate the font to 18/320 = 5.6% of width.
-const BANNER_SPEC = {
-  low:  { refW: 640,  fontPx: 36, lineHeight: 38, padY: 24 },
-  high: { refW: 1280, fontPx: 58, lineHeight: 76, padY: 46 },
-};
+// floor to sharpen the text does not shrink it. Standard output uses the
+// original 1280px-wide reference.
+const BANNER_SPEC = { standard: { refW: 1280, fontPx: 58, lineHeight: 76, padY: 46 } };
 const MIN_FONT_PX = 18;
 
 // `minWidth` is the composition floor: a frame narrower than the display size
 // gets upscaled by the browser, and the upscaled banner text is what looked
-// 8-bit. High has no floor, so its output is unchanged.
-const PROFILES = {
-  low:  { width: 640,  minWidth: 640,  maxVideoKbps: 900,  audioKbps: 64  },
-  high: { width: 1280, minWidth: 0,    maxVideoKbps: 5000, audioKbps: 128 },
-};
+// 8-bit. Standard output has no floor, so its output stays sharp.
+const PROFILE = { width: 1280, minWidth: 0, maxVideoKbps: 5000, audioKbps: 128 };
 
 // ── URL normalisation (fixes the paste-link failure) ─────────────────────────
 
@@ -109,7 +102,7 @@ export function cleanText(text) {
 
 // ── Main pipeline ────────────────────────────────────────────────────────────
 
-export async function generateClip({ url, quality, onProgress, signal }) {
+export async function generateClip({ url, onProgress, signal }) {
   if (typeof VideoEncoder === 'undefined') {
     throw new Error('This browser cannot encode video. Update to a recent Chrome, Edge or Safari 16.4+.');
   }
@@ -132,20 +125,18 @@ export async function generateClip({ url, quality, onProgress, signal }) {
     throw new Error('That link no longer matches the post. Copy the link again.');
   }
 
-  const profile = PROFILES[quality] || PROFILES.low;
+  const profile = PROFILE;
   const durationSec = (data.durationMs || 0) / 1000;
   if (durationSec > MAX_DURATION_SEC) {
     throw new Error('That video is longer than 10 minutes.');
   }
   if (!durationSec) throw new Error('Could not determine the video duration.');
 
-  // Low deliberately uses the smallest variant: less bandwidth, less decode work.
-  const variant = quality === 'high' ? data.variants.at(-1) : data.variants[0];
+  const variant = data.variants.at(-1);
   if (!variant) throw new Error('That post has no playable video.');
 
   // Duration-aware bitrate budget with headroom, so the result cannot exceed
-  // 20 MB. The per-tier cap is what keeps Low materially cheaper and lower
-  // quality than High on short clips; the budget only binds on long ones.
+  // Keep generated files within 20 MB.
   const totalKbps = (MAX_BYTES * 8 * HEADROOM) / durationSec / 1000;
   const audioKbps = profile.audioKbps;
   const videoKbps = Math.floor(Math.min(totalKbps - audioKbps, profile.maxVideoKbps));
@@ -173,7 +164,7 @@ export async function generateClip({ url, quality, onProgress, signal }) {
 
     // Banner metrics scale with the frame, so the text keeps the same share of
     // the width and the same on-screen size as the 320px-era original.
-    const spec = BANNER_SPEC[quality] || BANNER_SPEC.low;
+  const spec = BANNER_SPEC.standard;
     const scale = outW / spec.refW;
     const fontPx = Math.max(MIN_FONT_PX, Math.round(spec.fontPx * scale));
     const lineHeight = Math.round(spec.lineHeight * scale);
