@@ -103,14 +103,14 @@ function layoutLines(ctx, text, maxWidth, emojiPx) {
   return lines;
 }
 
-async function loadEmojiAssets(lines, size) {
+async function loadEmojiAssets(lines, size, signal) {
   const cache = new Map();
   const clusters = lines.flatMap(line => graphemes(line)).filter(isEmojiCluster);
   await Promise.all([...new Set(clusters)].map(async cluster => {
     const codepoints = emojiCodepoints(cluster);
     const assetUrl = `https://cdn.jsdelivr.net/gh/twitter/twemoji@latest/assets/svg/${codepoints}.svg`;
     try {
-      const response = await fetch(assetUrl, { mode: 'cors' });
+      const response = await fetch(assetUrl, { mode: 'cors', signal: AbortSignal.any([signal, AbortSignal.timeout(10_000)]) });
       if (!response.ok) throw new Error(`emoji asset ${response.status}`);
       const blob = await response.blob();
       const dataUrl = await new Promise((resolve, reject) => {
@@ -121,7 +121,7 @@ async function loadEmojiAssets(lines, size) {
       });
       const image = new Image();
       image.src = dataUrl;
-      await image.decode();
+      await abortable(image.decode(), AbortSignal.any([signal, AbortSignal.timeout(10_000)]));
       cache.set(cluster, image);
     } catch {
       /* native Canvas fallback */
@@ -178,7 +178,32 @@ export function cleanText(text) {
 
 // ── Main pipeline ────────────────────────────────────────────────────────────
 
-export async function generateClip({ url, version = 'standard', onProgress, signal }) {
+function abortable(promise, signal) {
+  return new Promise((resolve, reject) => {
+    const abort = () => reject(signal.reason || new DOMException('Generation canceled.', 'AbortError'));
+    promise.then(resolve, reject).finally(() => signal.removeEventListener('abort', abort));
+    if (signal.aborted) return abort();
+    signal.addEventListener('abort', abort, { once: true });
+  });
+}
+
+export async function generateClip(options) {
+  const controller = new AbortController();
+  const cancel = () => controller.abort(options.signal.reason);
+  options.signal?.addEventListener('abort', cancel, { once: true });
+  if (options.signal?.aborted) cancel();
+  const timer = setTimeout(() => controller.abort(new Error('Generation timed out. Try a shorter video.')), 600_000);
+  try { return await abortable(generateClipInternal({ ...options, signal: controller.signal,
+    onProgress: (...args) => { if (!controller.signal.aborted) options.onProgress?.(...args); },
+  }), controller.signal); }
+  catch (error) {
+    if (error.name === 'TimeoutError') throw new Error('Video request timed out. Check your connection and try again.');
+    throw error;
+  }
+  finally { clearTimeout(timer); options.signal?.removeEventListener('abort', cancel); }
+}
+
+async function generateClipInternal({ url, version = 'standard', onProgress, signal }) {
   if (!['standard', 'reel'].includes(version)) throw new Error('Choose a supported video layout.');
   const isReel = version === 'reel';
   if (typeof VideoEncoder === 'undefined') {
@@ -195,7 +220,7 @@ export async function generateClip({ url, version = 'standard', onProgress, sign
     // Send the canonical URL, never the raw paste: the worker only accepts
     // fully-formed https X/Twitter links.
     body: JSON.stringify({ url: canonical }),
-    signal,
+    signal: AbortSignal.any([signal, AbortSignal.timeout(30_000)]),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || 'Could not read that post.');
@@ -217,7 +242,7 @@ export async function generateClip({ url, version = 'standard', onProgress, sign
   // Keep generated files within 20 MB.
   const totalKbps = (MAX_BYTES * 8 * HEADROOM) / durationSec / 1000;
   const audioKbps = profile.audioKbps;
-  const videoKbps = Math.floor(Math.min(totalKbps - audioKbps, profile.maxVideoKbps));
+  let videoKbps = Math.floor(Math.min(totalKbps - audioKbps, profile.maxVideoKbps));
   if (videoKbps < 60) {
     throw new Error('That video is too long to fit in the 20 MB limit at a usable quality.');
   }
@@ -227,15 +252,20 @@ export async function generateClip({ url, version = 'standard', onProgress, sign
   // X's CDN answers 403 to any request that carries a Referer header, so the
   // media fetch must not send one. This is a hotlink-protection rule, not a
   // CORS rule — CORS itself is open and the request is cross-origin either way.
-  const source = new UrlSource(variant.url, { requestInit: { referrerPolicy: 'no-referrer' } });
+  const source = new UrlSource(variant.url, {
+    requestInit: { referrerPolicy: 'no-referrer' },
+    getRetryDelay: attempts => attempts < 3 ? 1 : null,
+  });
   const input = new Input({ formats: ALL_FORMATS, source });
+  let conversion;
+  const stop = () => { void conversion?.cancel().catch(() => {}); try { input.dispose(); } catch {} };
+  signal.addEventListener('abort', stop, { once: true });
 
   try {
-    const videoTrack = await input.getPrimaryVideoTrack();
+    const videoTrack = await abortable(input.getPrimaryVideoTrack(), AbortSignal.any([signal, AbortSignal.timeout(45_000)]));
     if (!videoTrack) throw new Error('That post has no video track.');
 
-    const srcW = await videoTrack.getDisplayWidth();
-    const srcH = await videoTrack.getDisplayHeight();
+    const [srcW, srcH] = await abortable(Promise.all([videoTrack.getDisplayWidth(), videoTrack.getDisplayHeight()]), AbortSignal.any([signal, AbortSignal.timeout(45_000)]));
     // Even width/height keeps H.264 encoders happy.
     const outW = Math.max(2, isReel ? srcW : Math.min(profile.width, srcW)) & ~1;
     const outH = Math.max(2, Math.round(outW * (srcH / srcW)) & ~1);
@@ -281,7 +311,7 @@ export async function generateClip({ url, version = 'standard', onProgress, sign
     const reelTop = isReel ? Math.max(0, Math.floor(reelStartY - reelAscent - reelPad)) : 0;
     const reelBottom = isReel ? Math.min(outH, Math.ceil(reelStartY + Math.max(0, lines.length - 1) * reelStep + reelDescent + reelPad)) : 0;
     const reelLayerH = Math.max(1, reelBottom - reelTop);
-    const emojiAssets = await loadEmojiAssets(lines, isReel ? reelFontPx : fontPx);
+    const emojiAssets = await abortable(loadEmojiAssets(lines, isReel ? reelFontPx : fontPx, signal), signal);
 
     // Draw the banner once into a reusable offscreen bitmap.
     const banner = document.createElement('canvas');
@@ -328,15 +358,17 @@ export async function generateClip({ url, version = 'standard', onProgress, sign
     // unencodable on this device) the conversion still "succeeds" and hands the
     // user an audio-only file. Require a video track in the output, and fall
     // back through the remaining codecs before giving up.
-    let output, conversion;
+    let output;
+    for (let sizeAttempt = 0; sizeAttempt < 2; sizeAttempt++) {
+    conversion = undefined;
     for (const codec of codecOrder) {
       let encodable = false;
-      try { encodable = await canEncodeVideo(codec, { width: outW, height: totalH }); }
+      try { encodable = await abortable(canEncodeVideo(codec, { width: outW, height: totalH }), AbortSignal.any([signal, AbortSignal.timeout(45_000)])); }
       catch { encodable = false; }
       if (!encodable) continue;
 
       const candidateOutput = new Output({ format: new Mp4OutputFormat(), target: new BufferTarget() });
-      const attempt = await Conversion.init({
+      const attempt = await abortable(Conversion.init({
         input, output: candidateOutput,
         video: {
           codec,
@@ -358,7 +390,7 @@ export async function generateClip({ url, version = 'standard', onProgress, sign
         // No audio options: the X source is already AAC, so Mediabunny copies
         // the track untouched. Forcing a transcode here silently dropped audio
         // on devices without an encoder for the source's channel/rate pairing.
-      });
+      }), AbortSignal.any([signal, AbortSignal.timeout(45_000)]));
 
       const discarded = attempt.discardedTracks.map((d) => `${d.track.type}:${d.reason}`);
       if (discarded.length) console.warn(`clip: discarded tracks (${codec}) — ${discarded.join(', ')}`);
@@ -375,18 +407,43 @@ export async function generateClip({ url, version = 'standard', onProgress, sign
       throw new Error('This device could not encode the video track. Try Chrome, Edge or Safari 16.4+ on a computer.');
     }
 
-    conversion.onProgress = (p) => onProgress?.('Encoding your clip...', 0.15 + p * 0.8);
-    await conversion.execute(signal ? { pauseSignal: signal } : undefined);
+    let lastProgress = performance.now();
+    let previousProgress = -1;
+    const stallController = new AbortController();
+    conversion.onProgress = (p) => {
+      if (p > previousProgress) { lastProgress = performance.now(); previousProgress = p; }
+      onProgress?.(`${sizeAttempt ? 'Fitting clip to 20 MB' : 'Encoding your clip'}... ${Math.round(p * 100)}%`, 0.15 + p * 0.8);
+    };
+    const stalled = setInterval(() => {
+      if (performance.now() - lastProgress > 60_000) {
+        stallController.abort(new Error('Video processing stopped responding. Try again or use a shorter video.'));
+        stop();
+      }
+    }, 5000);
+    try { await abortable(conversion.execute(), AbortSignal.any([signal, stallController.signal])); }
+    catch (error) {
+      if (performance.now() - lastProgress > 60_000) throw new Error('Video processing stopped responding. Try again or use a shorter video.');
+      throw error;
+    } finally { clearInterval(stalled); }
 
     const buffer = output.target.buffer;
     const blob = new Blob([buffer], { type: 'video/mp4' });
 
     // Safety net: never expose an oversized result.
     if (blob.size > MAX_BYTES) {
+      if (sizeAttempt === 0) {
+        console.info('clip: fitting oversized VBR output', { bytes: blob.size, videoKbps, durationSec });
+        videoKbps = Math.max(60, Math.floor((videoKbps + audioKbps) * MAX_BYTES / blob.size * 0.85 - audioKbps));
+        onProgress?.('Fitting clip to the 20 MB download limit...', 0.15);
+        continue;
+      }
       throw new Error('That video is too long to fit in the 20 MB limit. Try a shorter post.');
     }
     return { blob, text: bannerText, lines, author: data.author, handle: data.handle };
+    }
   } finally {
+    signal.removeEventListener('abort', stop);
+    void conversion?.cancel().catch(() => {});
     try { input.dispose(); } catch { /* already gone */ }
   }
 }
