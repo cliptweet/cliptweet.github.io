@@ -10,6 +10,13 @@ let generating = false;
 let objectUrl;
 const layoutInputs = Array.from(document.querySelectorAll('input[name="version"]'));
 
+if (matchMedia('(min-width: 1201px)').matches) {
+  document.querySelectorAll('.ad-slot .adsbygoogle').forEach(() => {
+    try { (window.adsbygoogle = window.adsbygoogle || []).push({}); }
+    catch (error) { console.warn('AdSense slot could not initialize.', error); }
+  });
+}
+
 try { if (sessionStorage.getItem('cliptweet-ad-notice-dismissed') === '1') adNotice.hidden = true; } catch {}
 adNoticeClose.addEventListener('click', () => {
   adNotice.hidden = true;
