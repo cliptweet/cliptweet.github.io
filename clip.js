@@ -65,7 +65,28 @@ export function normalizeTweetUrl(input) {
 
 // ── Text layout ──────────────────────────────────────────────────────────────
 
-function layoutLines(ctx, text, maxWidth) {
+const graphemeSegmenter = typeof Intl !== 'undefined' && Intl.Segmenter
+  ? new Intl.Segmenter(undefined, { granularity: 'grapheme' }) : null;
+
+function graphemes(text) {
+  if (graphemeSegmenter) return [...graphemeSegmenter.segment(text)].map(x => x.segment);
+  return Array.from(text);
+}
+
+function isEmojiCluster(cluster) {
+  return /\p{Extended_Pictographic}|\p{Regional_Indicator}|\u20e3|\ufe0f/u.test(cluster);
+}
+
+function emojiCodepoints(cluster) {
+  return [...cluster].map(ch => ch.codePointAt(0).toString(16)).join('-');
+}
+
+function visualWidth(ctx, text, emojiPx) {
+  return graphemes(text).reduce((width, cluster) =>
+    width + (isEmojiCluster(cluster) ? emojiPx : ctx.measureText(cluster).width), 0);
+}
+
+function layoutLines(ctx, text, maxWidth, emojiPx) {
   const lines = [];
   for (const paragraph of text.split('\n')) {
     if (!paragraph.trim()) { lines.push(''); continue; }
@@ -74,12 +95,66 @@ function layoutLines(ctx, text, maxWidth) {
     // paragraph never renders with a ragged leading gap.
     for (const word of paragraph.split(' ').filter(Boolean)) {
       const test = current ? current + ' ' + word : word;
-      if (current && ctx.measureText(test).width > maxWidth) { lines.push(current); current = word; }
+      if (current && visualWidth(ctx, test, emojiPx) > maxWidth) { lines.push(current); current = word; }
       else current = test;
     }
     if (current) lines.push(current);
   }
   return lines;
+}
+
+async function loadEmojiAssets(lines, size) {
+  const cache = new Map();
+  const clusters = lines.flatMap(line => graphemes(line)).filter(isEmojiCluster);
+  await Promise.all([...new Set(clusters)].map(async cluster => {
+    const codepoints = emojiCodepoints(cluster);
+    const assetUrl = `https://cdn.jsdelivr.net/gh/twitter/twemoji@latest/assets/svg/${codepoints}.svg`;
+    try {
+      const response = await fetch(assetUrl, { mode: 'cors' });
+      if (!response.ok) throw new Error(`emoji asset ${response.status}`);
+      const blob = await response.blob();
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+      const image = new Image();
+      image.src = dataUrl;
+      await image.decode();
+      cache.set(cluster, image);
+    } catch {
+      /* native Canvas fallback */
+    }
+  }));
+  return cache;
+}
+
+function drawVisualLine(ctx, line, centerX, y, maxWidth, emojiPx, assets, middle = false) {
+  const clusters = graphemes(line);
+  const parts = [];
+  for (const cluster of clusters) {
+    if (isEmojiCluster(cluster) || !parts.length || parts.at(-1).emoji) parts.push({ value: cluster, emoji: isEmojiCluster(cluster) });
+    else parts.at(-1).value += cluster;
+  }
+  const width = visualWidth(ctx, line, emojiPx);
+  let x = centerX - width / 2;
+  const previousAlign = ctx.textAlign;
+  ctx.textAlign = 'left';
+  for (const part of parts) {
+    const partWidth = part.emoji ? emojiPx : ctx.measureText(part.value).width;
+    const image = assets.get(part.value);
+    if (image) {
+      ctx.drawImage(image, x, middle ? y - emojiPx / 2 : y, emojiPx, emojiPx);
+    } else if (middle) {
+      ctx.strokeText(part.value, x, y);
+      ctx.fillText(part.value, x, y);
+    } else {
+      ctx.fillText(part.value, x, y);
+    }
+    x += partWidth;
+  }
+  ctx.textAlign = previousAlign;
 }
 
 export function cleanText(text) {
@@ -182,12 +257,12 @@ export async function generateClip({ url, version = 'standard', onProgress, sign
     // The banner renders the post's own prose only: links, t.co codes and
     // leading mentions are stripped before layout.
     const bannerText = cleanText(data.text);
-    let lines = bannerText ? layoutLines(measurer, bannerText, outW - padX * 2) : [];
+    let lines = bannerText ? layoutLines(measurer, bannerText, outW - padX * 2, fontPx) : [];
     let reelFontPx = Math.max(14, Math.round(outW * 0.05));
     if (isReel) {
       for (;;) {
         measurer.font = `800 ${reelFontPx}px ${BANNER_FONT_FAMILY}`;
-        lines = bannerText ? layoutLines(measurer, bannerText, outW * 0.9) : [];
+        lines = bannerText ? layoutLines(measurer, bannerText, outW * 0.9, reelFontPx) : [];
         if (reelFontPx <= 14 || lines.length * reelFontPx * 1.2 <= outH / 6) break;
         reelFontPx--;
       }
@@ -206,6 +281,7 @@ export async function generateClip({ url, version = 'standard', onProgress, sign
     const reelTop = isReel ? Math.max(0, Math.floor(reelStartY - reelAscent - reelPad)) : 0;
     const reelBottom = isReel ? Math.min(outH, Math.ceil(reelStartY + Math.max(0, lines.length - 1) * reelStep + reelDescent + reelPad)) : 0;
     const reelLayerH = Math.max(1, reelBottom - reelTop);
+    const emojiAssets = await loadEmojiAssets(lines, isReel ? reelFontPx : fontPx);
 
     // Draw the banner once into a reusable offscreen bitmap.
     const banner = document.createElement('canvas');
@@ -230,10 +306,9 @@ export async function generateClip({ url, version = 'standard', onProgress, sign
       bctx.lineWidth = reelStrokeWidth;
       lines.forEach((line, i) => {
         const y = reelStartY - reelTop + i * reelStep;
-        bctx.strokeText(line, outW / 2, y, outW * 0.9);
-        bctx.fillText(line, outW / 2, y, outW * 0.9);
+        drawVisualLine(bctx, line, outW / 2, y, outW * 0.9, reelFontPx, emojiAssets, true);
       });
-    } else lines.forEach((line, i) => bctx.fillText(line, outW / 2, padY + i * lineHeight));
+    } else lines.forEach((line, i) => drawVisualLine(bctx, line, outW / 2, padY + i * lineHeight, outW - padX * 2, fontPx, emojiAssets));
     bctx.shadowColor = 'transparent';
     bctx.shadowBlur = 0;
     bctx.shadowOffsetY = 0;
