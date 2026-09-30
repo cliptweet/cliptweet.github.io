@@ -12,7 +12,8 @@ const HEADROOM = 0.90;                 // container / audio overhead margin
 const MAX_DURATION_SEC = 600;
 
 // Banner colours match the previous server-rendered header.
-const BANNER_BG = '#15202B';
+const STANDARD_SURFACE = '#15202B';
+const BANNER_BG = STANDARD_SURFACE;
 const BANNER_FG = '#FFFFFF';
 // Same stack as the app UI. The bare `sans-serif` keyword resolves to a
 // bitmap-style font on some systems, which is what made the banner look 8-bit.
@@ -401,7 +402,7 @@ export async function generateClip({ url, identity, version = 'standard', brandi
         decoration.height = cardH * TEXT_SCALE;
         const ctx = decoration.getContext('2d');
         ctx.scale(TEXT_SCALE, TEXT_SCALE);
-        ctx.fillStyle = '#20303e';
+        ctx.fillStyle = STANDARD_SURFACE;
         ctx.fillRect(0, 0, outW, cardH);
         ctx.font = measurer.font;
         ctx.textBaseline = 'top';
