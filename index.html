@@ -14,8 +14,7 @@
   <meta property="og:url" content="https://cliptweet.github.io/">
   <meta property="og:site_name" content="ClipTweet">
   <meta name="twitter:card" content="summary">
-  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1549712380501865"
-     crossorigin="anonymous"></script>
+  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1549712380501865" crossorigin="anonymous"></script>
   <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"ClipTweet","url":"https://cliptweet.github.io/","applicationCategory":"MultimediaApplication","operatingSystem":"Web browser","isAccessibleForFree":true,"description":"Create downloadable MP4 clips combining an X/Twitter post's text and video, processed in your browser."}</script>
   <style>
     * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
@@ -50,11 +49,6 @@
     .ad-notice button { border: 0; background: transparent; color: #69bdff; cursor: pointer; padding: 0; white-space: nowrap; }
     .ad-notice[hidden] { display: none; }
     .form-group { margin-bottom: 1.25rem; }
-    .version-group { display: flex; gap: 0.5rem; border: 0; padding: 0; margin: 1rem 0; }
-    .version-group legend { color: #8899a6; margin-bottom: 0.5rem; }
-    .version-group label { flex: 1; padding: 0.65rem; border: 1px solid #253341; border-radius: 10px; cursor: pointer; }
-    .version-group small { display: block; margin-top: 0.4rem; }
-    .version-group input { accent-color: #1d9bf0; }
     label { display: block; font-size: 0.9rem; margin-bottom: 0.5rem; color: #8899a6; }
     /* Styled by id, not by type: the field is type="text" so that pasted links
        without a scheme are accepted instead of being blocked by native URL
@@ -92,6 +86,22 @@
     @media (min-width: 1201px) { .ad-slot { display: block; } }
 
     .input-hint { font-size: 0.8rem; color: #8899a6; margin: 0.45rem 0 0; line-height: 1.35; }
+    .personalize { border: 1px solid #253341; border-radius: 12px; padding: 0.85rem 0.9rem 0.9rem; margin: 1rem 0 0; }
+    .personalize__legend { font-size: 0.8rem; color: #8899a6; padding: 0 0.35rem; }
+    .personalize__row { display: flex; gap: 0.75rem; }
+    .personalize__field { flex: 1 1 0; min-width: 0; }
+    .personalize__field label { font-size: 0.78rem; margin-bottom: 0.3rem; }
+    .personalize__field input { width: 100%; box-sizing: border-box; padding: 0.55rem 0.6rem; font-size: 0.85rem; background: #0b1620; border: 1px solid #253341; border-radius: 10px; color: #fff; min-height: 44px; -webkit-user-select: text; user-select: text; }
+    .personalize__field input:focus { outline: none; border-color: #1d9bf0; }
+    .personalize__field input[aria-invalid="true"] { border-color: #f4212e; }
+    .personalize__hint { font-size: 0.72rem; color: #6b7c8d; margin: 0.3rem 0 0; line-height: 1.3; }
+    .personalize__status { font-size: 0.76rem; margin: 0.5rem 0 0; min-height: 1.1em; color: #8899a6; }
+    .personalize__status[data-tone="error"] { color: #ff7b83; }
+    .personalize__status[data-tone="ok"] { color: #6bd39b; }
+    .personalize__preview { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.5rem; font-size: 0.82rem; color: #fff; }
+    .personalize__preview[hidden] { display: none; }
+    .personalize__preview img { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; flex: none; }
+    @media (max-width: 560px) { .personalize__row { flex-direction: column; gap: 0.6rem; } }
     .policy-modal h2 { color: #1d9bf0; font-size: 1.3rem; margin: 0 0 1rem; }
     .policy-modal p, .policy-modal ul { font-size: 0.85rem; line-height: 1.55; color: #b9c4cf; }
     .policy-modal ul { padding-left: 1.2rem; margin: 0.75rem 0; }
@@ -128,6 +138,26 @@
     </div>
     <p class="input-hint" id="urlHint">Paste the link to the X/Twitter post that contains the video or GIF.</p>
     <fieldset class="version-group"><legend>Video layout</legend><label><input type="radio" name="version" value="standard" checked> Standard<small>Text above the video</small></label><label><input type="radio" name="version" value="reel"> Reel<small>Text over the video</small></label></fieldset>
+    <fieldset class="personalize" id="personalizeBox">
+      <legend class="personalize__legend">Personalize your clip (optional)</legend>
+      <div class="personalize__row">
+        <div class="personalize__field">
+          <label for="profileUrl">Your X post</label>
+          <input type="text" inputmode="url" id="profileUrl" placeholder="https://x.com/you/status/..." autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="profileHint" aria-invalid="false">
+          <p class="personalize__hint" id="profileHint">Use any of your posts &mdash; we only use it to get your profile picture.</p>
+        </div>
+        <div class="personalize__field">
+          <label for="displayName">Display name</label>
+          <input type="text" id="displayName" placeholder="@yourname" maxlength="30" autocomplete="off" spellcheck="false" aria-describedby="displayNameHint">
+          <p class="personalize__hint" id="displayNameHint">Shown next to your picture. We never fill this in for you.</p>
+        </div>
+      </div>
+      <p class="personalize__status" id="profileStatus" role="status" aria-live="polite"></p>
+      <div class="personalize__preview" id="profilePreview" hidden>
+        <img id="profileAvatar" alt="" width="40" height="40">
+        <span id="profilePreviewName"></span>
+      </div>
+    </fieldset>
     <button id="generateBtn" class="btn-primary">Generate Clip</button>
     <div id="status" class="status" role="status" aria-live="polite"></div>
 
@@ -157,7 +187,7 @@
     <h2 id="privacy">Privacy</h2>
     <p>ClipTweet sends the post link to its Cloudflare Worker to retrieve public metadata from X. Your browser contacts X's video CDN and jsDelivr for the video-processing library. These providers receive connection information such as your IP address. Generated videos remain on your device; ClipTweet does not upload or store them.</p>
     <p>Cloudflare processes resolver requests and may retain operational logs. Generated videos remain on your device.</p>
-    <p>ClipTweet loads Google AdSense for advertising. Third-party vendors, including Google, may use cookies to serve ads based on prior visits to this or other websites. Google's advertising cookies allow Google and its partners to serve ads based on those visits. Other advertising partners may also use cookies or similar technologies. You can manage personalized advertising in <a href="https://myadcenter.google.com/" rel="noopener noreferrer">Google My Ad Center</a> or opt out of participating third-party vendors through <a href="https://www.aboutads.info/choices/" rel="noopener noreferrer">YourAdChoices</a>. See <a href="https://business.safety.google/privacy/" rel="noopener noreferrer">how Google uses data</a>. This optional advertising notice is not a consent form.</p>
+    <p>ClipTweet loads Google AdSense for optional display advertising. Google and other vendors may use cookies or similar technologies; manage personalized advertising in <a href="https://myadcenter.google.com/" rel="noopener noreferrer">Google My Ad Center</a> or <a href="https://www.aboutads.info/choices/" rel="noopener noreferrer">YourAdChoices</a>. See <a href="https://business.safety.google/privacy/" rel="noopener noreferrer">how Google uses data</a>.</p>
   </section>
   </main>
   <footer><a href="#terms">Terms</a> · <a href="#privacy">Privacy</a> · ClipTweet is not affiliated with X / Twitter.</footer>

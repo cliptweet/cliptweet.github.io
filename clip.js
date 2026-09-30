@@ -176,6 +176,30 @@ export function cleanText(text) {
     .trim();
 }
 
+const CONTROL_RE = /[\u0000-\u001f\u007f-\u009f]/g;
+const BIDI_RE = /[\u202a-\u202e\u2066-\u2069]/g;
+function sanitizeDisplayName(value) {
+  const text = String(value || '').replace(CONTROL_RE, '').replace(BIDI_RE, '').replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
+  return Array.from(text).slice(0, 30).join('');
+}
+async function buildIdentityBlock(dataUrl, name, fontPx, maxWidth) {
+  if (!/^data:image\/(?:png|jpeg|webp);base64,/i.test(String(dataUrl || ''))) return null;
+  const response = await fetch(dataUrl);
+  const bitmap = await createImageBitmap(await response.blob());
+  const diameter = Math.min(Math.round(fontPx * 2.25), bitmap.width, bitmap.height);
+  if (diameter < 2) { bitmap.close(); return null; }
+  const gap = Math.round(diameter * .4), namePx = Math.max(12, Math.round(fontPx * .88));
+  const canvas = document.createElement('canvas'); canvas.width = maxWidth; canvas.height = diameter;
+  const ctx = canvas.getContext('2d'); ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+  ctx.save(); ctx.beginPath(); ctx.arc(diameter / 2, diameter / 2, diameter / 2, 0, Math.PI * 2); ctx.clip();
+  const scale = Math.max(diameter / bitmap.width, diameter / bitmap.height);
+  const w = bitmap.width * scale, h = bitmap.height * scale;
+  ctx.drawImage(bitmap, (diameter - w) / 2, (diameter - h) / 2, w, h); ctx.restore();
+  ctx.font = `700 ${namePx}px ${BANNER_FONT_FAMILY}`; ctx.fillStyle = '#fff'; ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+  let label = name; while (label && ctx.measureText(label).width > maxWidth - diameter - gap) label = `${label.slice(0, -1).trim()}…`;
+  ctx.fillText(label, diameter + gap, diameter / 2); return { canvas, diameter, height: diameter, bitmap };
+}
+
 // ── Main pipeline ────────────────────────────────────────────────────────────
 
 function abortable(promise, signal) {
@@ -203,7 +227,7 @@ export async function generateClip(options) {
   finally { clearTimeout(timer); options.signal?.removeEventListener('abort', cancel); }
 }
 
-async function generateClipInternal({ url, version = 'standard', onProgress, signal }) {
+async function generateClipInternal({ url, version = 'standard', identity, onProgress, signal }) {
   if (!['standard', 'reel'].includes(version)) throw new Error('Choose a supported video layout.');
   const isReel = version === 'reel';
   if (typeof VideoEncoder === 'undefined') {
@@ -299,7 +323,11 @@ async function generateClipInternal({ url, version = 'standard', onProgress, sig
     }
     // A post that is nothing but a link yields no prose, so no banner at all
     // rather than an empty black bar.
-    const bannerH = !isReel && lines.length ? Math.ceil(padY * 2 + lines.length * lineHeight) : 0;
+    const identityName = !isReel ? sanitizeDisplayName(identity?.name) : '';
+    const identityBlock = identityName && identity?.avatar ? await buildIdentityBlock(identity.avatar, identityName, fontPx, outW - padX * 2) : null;
+    const identityGap = identityBlock ? Math.round(lineHeight * .5) : 0;
+    const textTop = identityBlock ? padY + identityBlock.height + identityGap : padY;
+    const bannerH = !isReel && (lines.length || identityBlock) ? Math.ceil(padY * 2 + (identityBlock ? identityBlock.height + identityGap : 0) + lines.length * lineHeight) : 0;
     const totalH = bannerH + outH;
     const reelStep = reelFontPx * 1.2;
     const reelStartY = Math.max(reelStep / 2, Math.min(outH * 5 / 6 - (lines.length - 1) * reelStep / 2, outH - (lines.length - 0.5) * reelStep));
@@ -318,7 +346,7 @@ async function generateClipInternal({ url, version = 'standard', onProgress, sig
     banner.width = outW * TEXT_SCALE; banner.height = (isReel ? reelLayerH : bannerH) * TEXT_SCALE;
     const bctx = banner.getContext('2d');
     bctx.scale(TEXT_SCALE, TEXT_SCALE);
-    if (!isReel) { bctx.fillStyle = BANNER_BG; bctx.fillRect(0, 0, outW, bannerH); }
+    if (!isReel) { bctx.fillStyle = BANNER_BG; bctx.fillRect(0, 0, outW, bannerH); if (identityBlock) bctx.drawImage(identityBlock.canvas, padX, padY); }
     bctx.fillStyle = BANNER_FG;
     bctx.font = font;
     bctx.textAlign = 'center'; bctx.textBaseline = 'top';
@@ -338,7 +366,8 @@ async function generateClipInternal({ url, version = 'standard', onProgress, sig
         const y = reelStartY - reelTop + i * reelStep;
         drawVisualLine(bctx, line, outW / 2, y, outW * 0.9, reelFontPx, emojiAssets, true);
       });
-    } else lines.forEach((line, i) => drawVisualLine(bctx, line, outW / 2, padY + i * lineHeight, outW - padX * 2, fontPx, emojiAssets));
+    } else lines.forEach((line, i) => drawVisualLine(bctx, line, outW / 2, textTop + i * lineHeight, outW - padX * 2, fontPx, emojiAssets));
+    identityBlock?.bitmap.close?.();
     bctx.shadowColor = 'transparent';
     bctx.shadowBlur = 0;
     bctx.shadowOffsetY = 0;
