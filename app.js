@@ -208,6 +208,8 @@ generateBtn.addEventListener('click', async () => {
     const { generateClip, normalizeTweetUrl } = await import('./clip.js');
     try { normalizeTweetUrl(url); } catch (error) { statusDiv.textContent = error.message; return; }
     const result = await generateClip({ url, version, branding: !withoutBranding.checked, identity: version === 'standard' ? identity : null, signal: controller.signal, onProgress: message => { statusDiv.textContent = message; } });
+    statusDiv.textContent = 'Encoding your clip... 100%';
+    await new Promise(requestAnimationFrame);
     if (objectUrl) URL.revokeObjectURL(objectUrl);
     objectUrl = URL.createObjectURL(result.blob);
     previewVideo.src = objectUrl;

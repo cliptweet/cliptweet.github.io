@@ -500,7 +500,7 @@ export async function generateClip({ url, identity, version = 'standard', brandi
       throw new Error('This device could not encode the video track. Try Chrome, Edge or Safari 16.4+ on a computer.');
     }
 
-    conversion.onProgress = (p) => onProgress?.('Encoding your clip...', 0.15 + p * 0.8);
+    conversion.onProgress = (p) => onProgress?.(`Encoding your clip... ${Math.round(p * 100)}%`, 0.15 + p * 0.8);
     await conversion.execute(signal ? { pauseSignal: signal } : undefined);
 
     const buffer = output.target.buffer;
