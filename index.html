@@ -99,6 +99,12 @@
     .personalize__preview { display: flex; align-items: center; gap: 10px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); font-size: 14px; }
     .personalize__preview img { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; flex: none; }
     #profilePreviewName { overflow-wrap: anywhere; min-width: 0; }
+    .branding-options { margin-bottom: 24px; }
+    .branding-option { display: flex; align-items: center; gap: 10px; min-height: 44px; margin-bottom: 0; cursor: pointer; line-height: 1.5; }
+    .branding-option input { width: 18px; height: 18px; flex: none; margin: 0; accent-color: var(--accent); }
+    .branding-option:hover { color: var(--accent); }
+    .branding-option:has(input:focus-visible) { outline: 3px solid var(--accent); outline-offset: 4px; border-radius: 4px; }
+    .branding-options .input-hint { margin: 4px 0 0 28px; }
     .btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 10px; width: 100%; min-height: 52px; padding: 12px 18px; border: 1px solid transparent; border-radius: 10px; background: var(--accent); color: var(--page); font-size: 16px; font-weight: 750; cursor: pointer; }
     .btn-primary:hover:not(:disabled) { background: #8dccff; }
     .btn-primary:active:not(:disabled) { transform: translateY(1px); }
@@ -258,6 +264,10 @@
         <span id="profilePreviewName"></span>
       </div>
     </fieldset>
+    <div id="brandingOptions" class="branding-options">
+      <label class="branding-option" for="withoutBranding"><input type="checkbox" id="withoutBranding" name="withoutBranding" aria-describedby="brandingHint">Create without ClipTweet branding</label>
+      <p id="brandingHint" class="input-hint">ClipTweet is supported by ads. Keeping the branding helps more people discover the site and supports its growth.</p>
+    </div>
     <button id="generateBtn" class="btn-primary">Generate Clip</button>
     <div id="status" class="status" role="status" aria-live="polite"></div>
 

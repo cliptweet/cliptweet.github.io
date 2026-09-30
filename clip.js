@@ -210,7 +210,7 @@ async function buildIdentityBlock(avatarUrl, label, fontPx, maxWidth) {
 
 // ── Main pipeline ────────────────────────────────────────────────────────────
 
-export async function generateClip({ url, identity, version = 'standard', onProgress, signal }) {
+export async function generateClip({ url, identity, version = 'standard', branding = true, onProgress, signal }) {
   if (!['standard', 'reel'].includes(version)) throw new Error('Choose a supported video layout.');
   const isReel = version === 'reel';
   if (typeof VideoEncoder === 'undefined') {
@@ -386,15 +386,16 @@ export async function generateClip({ url, identity, version = 'standard', onProg
         const mediaW = outW - padding * 2;
         const mediaH = Math.max(2, Math.round(mediaW * srcH / srcW) & ~1);
         const radius = Math.min(mediaW / 2, mediaH / 2, Math.max(10, Math.round(outW * 0.025)));
-        const gap = Math.max(3, Math.round(outW * 0.006));
-        let signaturePx = Math.max(9, Math.round(outW * 0.014));
+        const gap = Math.max(6, Math.round(outW * 0.012));
+        let signaturePx = Math.round(Math.max(9, Math.round(outW * 0.014)) * 1.5);
         const signature = 'Made with ClipTweet · cliptweet.github.io';
         measurer.font = `400 ${signaturePx}px ${BANNER_FONT_FAMILY}`;
         while (signaturePx > 7 && measurer.measureText(signature).width > mediaW) {
           signaturePx--;
           measurer.font = `400 ${signaturePx}px ${BANNER_FONT_FAMILY}`;
         }
-        const cardH = (Math.ceil(padding + mediaH + gap + signaturePx * 1.35 + padding) + 1) & ~1;
+        const footerH = branding ? gap + signaturePx * 1.35 : 0;
+        const cardH = (Math.ceil(padding + mediaH + footerH + padding) + 1) & ~1;
         const decoration = document.createElement('canvas');
         decoration.width = outW * TEXT_SCALE;
         decoration.height = cardH * TEXT_SCALE;
@@ -405,7 +406,7 @@ export async function generateClip({ url, identity, version = 'standard', onProg
         ctx.font = measurer.font;
         ctx.textBaseline = 'top';
         ctx.fillStyle = '#b1bdc8';
-        ctx.fillText(signature, padding, padding + mediaH + gap);
+        if (branding) ctx.fillText(signature, padding, padding + mediaH + gap);
         const mask = new Path2D();
         mask.roundRect(padding, bannerH + padding, mediaW, mediaH, radius);
         card = { decoration, mask, x: padding, y: bannerH + padding, width: mediaW, height: mediaH, cardH };

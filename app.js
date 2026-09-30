@@ -13,6 +13,8 @@ const profilePreview = document.getElementById('profilePreview');
 const profileAvatar = document.getElementById('profileAvatar');
 const profilePreviewName = document.getElementById('profilePreviewName');
 const personalizeBox = document.getElementById('personalizeBox');
+const brandingOptions = document.getElementById('brandingOptions');
+const withoutBranding = document.getElementById('withoutBranding');
 const layoutInputs = Array.from(document.querySelectorAll('input[name="version"]'));
 let generating = false;
 let objectUrl;
@@ -163,11 +165,13 @@ function setBusy(value) {
   generateBtn.disabled = value;
   input.disabled = value;
   layoutInputs.forEach(radio => { radio.disabled = value; });
+  withoutBranding.disabled = value;
 }
 
 function updateLayout() {
   const isReel = layoutInputs.find(radio => radio.checked)?.value === 'reel';
   personalizeBox.hidden = isReel;
+  brandingOptions.hidden = isReel;
   if (isReel) clearProfile();
 }
 layoutInputs.forEach(radio => radio.addEventListener('change', updateLayout));
@@ -203,7 +207,7 @@ generateBtn.addEventListener('click', async () => {
     }
     const { generateClip, normalizeTweetUrl } = await import('./clip.js');
     try { normalizeTweetUrl(url); } catch (error) { statusDiv.textContent = error.message; return; }
-    const result = await generateClip({ url, version, identity: version === 'standard' ? identity : null, signal: controller.signal, onProgress: message => { statusDiv.textContent = message; } });
+    const result = await generateClip({ url, version, branding: !withoutBranding.checked, identity: version === 'standard' ? identity : null, signal: controller.signal, onProgress: message => { statusDiv.textContent = message; } });
     if (objectUrl) URL.revokeObjectURL(objectUrl);
     objectUrl = URL.createObjectURL(result.blob);
     previewVideo.src = objectUrl;
