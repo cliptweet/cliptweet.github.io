@@ -89,11 +89,8 @@ async function resolveProfile(raw) {
   const controller = new AbortController();
   profileController = controller;
   setProfileStatus('Loading profile…');
-  const apiBase = String(globalThis.CLIPTWEET_API_BASE || '').replace(/\/$/, '');
   try {
     const avatar = `https://unavatar.io/twitter/${encodeURIComponent(handle)}`;
-    const probe = await fetch(avatar, { method: 'HEAD', signal: controller.signal });
-    if (!probe.ok) return { error: "Couldn't load that profile picture." };
     const entry = { handle, avatar };
     profileCache.set(handle, entry);
     return entry;
