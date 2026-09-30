@@ -44,6 +44,9 @@
     .card { background: #192734; padding: 2rem; border-radius: 16px; width: 100%; max-width: 480px; box-shadow: 0 8px 24px rgba(0,0,0,0.3); }
     h1 { font-size: 1.5rem; margin-bottom: 0.5rem; text-align: center; color: #1d9bf0; }
     .tagline { font-size: 0.82rem; color: #8899a6; text-align: center; line-height: 1.5; margin: 0 0 1.5rem; }
+    .ad-notice { display: flex; gap: 0.5rem; align-items: center; margin: 0 0 1.25rem; padding: 0.65rem 0.75rem; border: 1px solid #253341; border-radius: 10px; color: #8899a6; font-size: 0.78rem; line-height: 1.35; }
+    .ad-notice button { border: 0; background: transparent; color: #69bdff; cursor: pointer; padding: 0; white-space: nowrap; }
+    .ad-notice[hidden] { display: none; }
     .form-group { margin-bottom: 1.25rem; }
     label { display: block; font-size: 0.9rem; margin-bottom: 0.5rem; color: #8899a6; }
     /* Styled by id, not by type: the field is type="text" so that pasted links
@@ -112,6 +115,7 @@
   <div class="card">
     <h1>ClipTweet — X / Twitter Video Downloader</h1>
     <p class="tagline">Paste an X/Twitter post link and get an MP4 with the post text above its video, ready to download.</p>
+    <div id="adNotice" class="ad-notice" role="note"><span>ClipTweet is free to use. Ads help us keep it that way. If you'd like, you can allow ads on this site.</span><button id="adNoticeClose" type="button">Dismiss</button></div>
     <div class="form-group">
       <label for="tweetUrl">Tweet or Video URL:</label>
       <input type="text" inputmode="url" id="tweetUrl" placeholder="https://x.com/user/status/123456789" autocomplete="off" autocapitalize="off" spellcheck="false">
@@ -135,12 +139,14 @@
     <ol><li>Copy the link to a public X or Twitter post containing a video.</li><li>Paste it above and select Generate Clip.</li><li>Preview your clip and select Download MP4.</li></ol>
     <p>ClipTweet processes the video in your browser. Keep this tab open until the clip is ready.</p>
     <h2>Frequently asked questions</h2>
-    <h3>Are downloads free?</h3><p>Yes. ClipTweet is free to use.</p>
+    <h3>Are downloads free?</h3><p>Yes. ClipTweet provides a complete generation flow free of charge. Display advertising may help fund operation; allowing ads is optional, and ad blockers do not prevent generating or downloading. No feature is unlocked by interacting with ads.</p>
     <h3>Which posts work?</h3><p>Public posts with a playable video and duration metadata. Private, protected or deleted posts cannot be downloaded. Some animated GIF posts lack duration metadata and are not supported.</p>
     <h3>What are the limits?</h3><p>Videos must be no longer than 10 minutes; the generated MP4 must fit within 20 MB. Some devices or codecs are unsupported. Use an up-to-date browser with WebCodecs support.</p>
     <h3>Does ClipTweet store my videos?</h3><p>No. Your browser downloads media directly from X's video CDN and creates the output locally. Our resolver only retrieves post metadata.</p>
+    <h3>How does ClipTweet stay free?</h3><p>ClipTweet may show independent display advertising around the tool. Allowing ads is optional and helps support maintenance; it is never required to generate or download a clip.</p>
+    <h3>Can I use an ad blocker?</h3><p>Yes. Ad blockers and Brave Shields do not affect generation or downloads. You can dismiss the optional notice.</p>
     <h2 id="terms">Terms of use</h2>
-    <p>Download and reuse only content you own or have permission to use. You remain responsible for copyright, privacy and applicable platform rules. ClipTweet is independent of X Corp. Availability and compatibility are not guaranteed. Automated bulk extraction and attempts to bypass service limits are not permitted.</p>
+    <p>ClipTweet provides a technical tool that processes content selected by the user. You are responsible for having the rights or permissions needed to process or download that content and for respecting applicable laws, platform rules, privacy, copyright and other third-party rights. ClipTweet does not grant rights to third-party content. ClipTweet is independent of X Corp. Availability and compatibility are not guaranteed. Automated bulk extraction and attempts to bypass service limits are not permitted.</p>
     <h2 id="privacy">Privacy</h2>
     <p>ClipTweet sends the post link to its Cloudflare Worker to retrieve public metadata from X. Your browser contacts X's video CDN and jsDelivr for the video-processing library. These providers receive connection information such as your IP address. Generated videos remain on your device; ClipTweet does not upload or store them.</p>
     <p>Cloudflare processes resolver requests and may retain operational logs. Generated videos remain on your device.</p>

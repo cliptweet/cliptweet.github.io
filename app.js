@@ -4,8 +4,16 @@ const statusDiv = document.getElementById('status');
 const previewContainer = document.getElementById('previewContainer');
 const previewVideo = document.getElementById('previewVideo');
 const downloadBtn = document.getElementById('downloadBtn');
+const adNotice = document.getElementById('adNotice');
+const adNoticeClose = document.getElementById('adNoticeClose');
 let generating = false;
 let objectUrl;
+
+try { if (sessionStorage.getItem('cliptweet-ad-notice-dismissed') === '1') adNotice.hidden = true; } catch {}
+adNoticeClose.addEventListener('click', () => {
+  adNotice.hidden = true;
+  try { sessionStorage.setItem('cliptweet-ad-notice-dismissed', '1'); } catch {}
+});
 
 function setBusy(value) {
   generating = value;
