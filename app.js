@@ -82,8 +82,14 @@ function resolveProfile(raw) {
   const handle = extractProfileUsername(raw);
   if (!handle) return { empty: true };
   if (profileCache.has(handle)) return { ...profileCache.get(handle), handle };
+  const apiBase = String(globalThis.CLIPTWEET_API_BASE || '').replace(/\/$/, '');
   const entry = { handle, avatar: `https://unavatar.io/twitter/${encodeURIComponent(handle)}` };
   profileCache.set(handle, entry);
+  fetch(`${apiBase}/api/profile?url=${encodeURIComponent(handle)}`).then(async response => {
+    if (!response.ok) return;
+    const data = await response.json().catch(() => ({}));
+    if (data.avatar && resolvedHandle === handle) profileAvatar.src = data.avatar;
+  }).catch(() => {});
   return entry;
 }
 
