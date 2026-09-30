@@ -63,11 +63,10 @@ function hideProfilePreview() {
 }
 
 function extractProfileUsername(raw) {
-  const value = String(raw || '').trim();
-  if (!value) return null;
-  const bare = value.replace(/^@/, '').replace(/^https?:\/\/(?:www\.|mobile\.)?(?:x|twitter)\.com\//i, '').split(/[/?#]/)[0];
-  if (!/^[A-Za-z0-9_]{1,15}$/.test(bare)) throw new Error('Invalid profile username');
-  return bare;
+  const clean = String(raw || '').trim();
+  if (!clean) return '';
+  const match = clean.match(/(?:https?:\/\/(?:twitter|x)\.com\/)?@?([a-zA-Z0-9_]{1,15})\/?$/i);
+  return match ? match[1] : '';
 }
 
 function clearProfile() {
@@ -79,25 +78,13 @@ function clearProfile() {
   profileUrlInput.setAttribute('aria-invalid', 'false');
 }
 
-async function resolveProfile(raw) {
-  let handle;
-  try { handle = extractProfileUsername(raw); }
-  catch (error) { return { error: error.message }; }
+function resolveProfile(raw) {
+  const handle = extractProfileUsername(raw);
   if (!handle) return { empty: true };
   if (profileCache.has(handle)) return { ...profileCache.get(handle), handle };
-  profileController?.abort();
-  const controller = new AbortController();
-  profileController = controller;
-  setProfileStatus('Loading profile…');
-  try {
-    const avatar = `https://unavatar.io/twitter/${encodeURIComponent(handle)}`;
-    const entry = { handle, avatar };
-    profileCache.set(handle, entry);
-    return entry;
-  } catch (error) {
-    if (error.name === 'AbortError') return { empty: true };
-    return { error: "Couldn't load the profile. You can still generate without it." };
-  }
+  const entry = { handle, avatar: `https://unavatar.io/twitter/${encodeURIComponent(handle)}` };
+  profileCache.set(handle, entry);
+  return entry;
 }
 
 function scheduleProfileResolve() {
@@ -110,7 +97,7 @@ async function runProfileResolve() {
   if (result.empty) { clearProfile(); return result; }
   if (result.error) {
     hideProfilePreview();
-    setProfileStatus(result.error === 'Invalid profile' ? 'Invalid profile' : result.error, 'error');
+    setProfileStatus('Enter a valid X username or profile URL.', 'error');
     profileUrlInput.setAttribute('aria-invalid', 'true');
     profilePending = null;
     return result;
