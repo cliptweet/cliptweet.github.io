@@ -24,6 +24,7 @@ const BANNER_FONT_FAMILY = '-apple-system, BlinkMacSystemFont, "Segoe UI", Robot
 // original 1280px-wide reference.
 const BANNER_SPEC = { standard: { refW: 1280, fontPx: 58, lineHeight: 76, padY: 46 } };
 const MIN_FONT_PX = 18;
+const TEXT_SCALE = 2;
 
 // `minWidth` is the composition floor: a frame narrower than the display size
 // gets upscaled by the browser, and the upscaled banner text is what looked
@@ -195,11 +196,22 @@ export async function generateClip({ url, version = 'standard', onProgress, sign
     // rather than an empty black bar.
     const bannerH = !isReel && lines.length ? Math.ceil(padY * 2 + lines.length * lineHeight) : 0;
     const totalH = bannerH + outH;
+    const reelStep = reelFontPx * 1.2;
+    const reelStartY = Math.max(reelStep / 2, Math.min(outH * 5 / 6 - (lines.length - 1) * reelStep / 2, outH - (lines.length - 0.5) * reelStep));
+    const reelStrokeWidth = Math.max(2, reelFontPx * 0.14);
+    const reelMetrics = isReel ? lines.map(line => measurer.measureText(line)) : [];
+    const reelAscent = Math.max(reelFontPx, ...reelMetrics.map(metric => metric.actualBoundingBoxAscent || 0));
+    const reelDescent = Math.max(reelFontPx * 0.3, ...reelMetrics.map(metric => metric.actualBoundingBoxDescent || 0));
+    const reelPad = Math.ceil(reelStrokeWidth / 2 + 2);
+    const reelTop = isReel ? Math.max(0, Math.floor(reelStartY - reelAscent - reelPad)) : 0;
+    const reelBottom = isReel ? Math.min(outH, Math.ceil(reelStartY + Math.max(0, lines.length - 1) * reelStep + reelDescent + reelPad)) : 0;
+    const reelLayerH = Math.max(1, reelBottom - reelTop);
 
     // Draw the banner once into a reusable offscreen bitmap.
     const banner = document.createElement('canvas');
-    banner.width = outW; banner.height = isReel ? outH : bannerH;
+    banner.width = outW * TEXT_SCALE; banner.height = (isReel ? reelLayerH : bannerH) * TEXT_SCALE;
     const bctx = banner.getContext('2d');
+    bctx.scale(TEXT_SCALE, TEXT_SCALE);
     if (!isReel) { bctx.fillStyle = BANNER_BG; bctx.fillRect(0, 0, outW, bannerH); }
     bctx.fillStyle = BANNER_FG;
     bctx.font = font;
@@ -215,12 +227,11 @@ export async function generateClip({ url, version = 'standard', onProgress, sign
       bctx.shadowColor = 'transparent';
       bctx.strokeStyle = '#000';
       bctx.lineJoin = 'round';
-      bctx.lineWidth = Math.max(2, reelFontPx * 0.14);
-      const step = reelFontPx * 1.2;
-      const startY = Math.max(step / 2, Math.min(outH * 5 / 6 - (lines.length - 1) * step / 2, outH - (lines.length - 0.5) * step));
+      bctx.lineWidth = reelStrokeWidth;
       lines.forEach((line, i) => {
-        bctx.strokeText(line, outW / 2, startY + i * step, outW * 0.9);
-        bctx.fillText(line, outW / 2, startY + i * step, outW * 0.9);
+        const y = reelStartY - reelTop + i * reelStep;
+        bctx.strokeText(line, outW / 2, y, outW * 0.9);
+        bctx.fillText(line, outW / 2, y, outW * 0.9);
       });
     } else lines.forEach((line, i) => bctx.fillText(line, outW / 2, padY + i * lineHeight));
     bctx.shadowColor = 'transparent';
@@ -230,6 +241,8 @@ export async function generateClip({ url, version = 'standard', onProgress, sign
     const frame = document.createElement('canvas');
     frame.width = outW; frame.height = totalH;
     const fctx = frame.getContext('2d', { alpha: false });
+    fctx.imageSmoothingEnabled = true;
+    fctx.imageSmoothingQuality = 'high';
 
     onProgress?.('Encoding your clip...', 0.15);
 
@@ -257,11 +270,11 @@ export async function generateClip({ url, version = 'standard', onProgress, sign
           // output size, so any automatic resize stage would rescale the banner.
           quality: new Quality({ bitrate: Math.round(videoKbps * 1000) }),
           process: (sample) => {
-            if (!isReel) fctx.drawImage(banner, 0, 0);
+            if (!isReel && bannerH) fctx.drawImage(banner, 0, 0, outW, bannerH);
             // Explicit size: the video is scaled to the final frame, so the
             // banner above is never resampled and the text stays crisp.
             sample.draw(fctx, 0, bannerH, outW, outH);
-            if (isReel) fctx.drawImage(banner, 0, 0);
+            if (isReel && lines.length) fctx.drawImage(banner, 0, reelTop, outW, reelLayerH);
             return frame;
           },
           processedWidth: outW,
