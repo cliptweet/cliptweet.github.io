@@ -22,7 +22,7 @@ const BANNER_FONT_FAMILY = '-apple-system, BlinkMacSystemFont, "Segoe UI", Robot
 // `fontPx / outW` is the same for every width, so raising the composition
 // floor to sharpen the text does not shrink it. Standard output uses the
 // original 1280px-wide reference.
-const BANNER_SPEC = { standard: { refW: 1280, fontPx: 58, lineHeight: 76, padY: 46 } };
+const BANNER_SPEC = { standard: { refW: 1280, fontPx: 58, lineHeight: 82, padY: 46 } };
 const MIN_FONT_PX = 18;
 const TEXT_SCALE = 2;
 
@@ -154,20 +154,21 @@ async function buildIdentityBlock(avatarUrl, label, fontPx, maxWidth) {
     if (bitmap.width < diameter) diameter = bitmap.width;   // never upscale
     const gap = Math.round(diameter * 0.4);                // avatar to name
     let nameFontPx = Math.max(12, Math.round(fontPx * 0.88));
+    const textWidth = Math.max(1, maxWidth - diameter - gap);
 
     // The name is centred with the avatar, so its own width decides the strip.
     const measurer = document.createElement('canvas').getContext('2d');
     const weight = fontPx >= 40 ? '600' : '700';
     measurer.font = `${weight} ${nameFontPx}px ${BANNER_FONT_FAMILY}`;
     let text = label;
-    if (measurer.measureText(text).width > maxWidth) {
+    if (measurer.measureText(text).width > textWidth) {
       // Shrink before truncating, and never let the glyphs overflow the box.
-      while (nameFontPx > 12 && measurer.measureText(text).width > maxWidth) {
-        measurer.font = `${weight} ${nameFontPx}px ${BANNER_FONT_FAMILY}`;
+      while (nameFontPx > 12 && measurer.measureText(text).width > textWidth) {
         nameFontPx -= 1;
+        measurer.font = `${weight} ${nameFontPx}px ${BANNER_FONT_FAMILY}`;
       }
-      if (measurer.measureText(text).width > maxWidth) {
-        while (text.length > 1 && measurer.measureText(text + '…').width > maxWidth) {
+      if (measurer.measureText(text).width > textWidth) {
+        while (text.length > 1 && measurer.measureText(text + '…').width > textWidth) {
           text = text.slice(0, -1);
         }
         text += '…';
@@ -192,10 +193,13 @@ async function buildIdentityBlock(avatarUrl, label, fontPx, maxWidth) {
     ctx.drawImage(bitmap, sx, sy, side, side, 0, 0, diameter, diameter);
     ctx.restore();
 
+    const blockTop = Math.round((diameter - nameFontPx) / 2);
+    const textX = diameter + gap;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
     ctx.font = `${weight} ${nameFontPx}px ${BANNER_FONT_FAMILY}`;
     ctx.fillStyle = BANNER_FG;
-    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-    ctx.fillText(text, diameter + gap, diameter / 2);
+    ctx.fillText(text, textX, blockTop + nameFontPx / 2, textWidth);
 
     return { canvas, diameter, height: diameter, bitmap };
   } catch (error) {
@@ -304,8 +308,8 @@ export async function generateClip({ url, identity, version = 'standard', onProg
     }
     // A post that is nothing but a link yields no prose, so no banner at all
     // rather than an empty black bar.
-    // Optional identity block above the post text. Without it every added figure
-    // is 0, so the plain Standard layout and its height are untouched.
+    // Optional identity block above the post text. Without it, only the shared
+    // Standard typography metrics determine the banner height.
     const name = isReel ? '' : sanitizeDisplayName(identity?.name);
     const hasIdentity = !!(name && identity?.avatar);
     const identityBlock = hasIdentity
@@ -313,15 +317,13 @@ export async function generateClip({ url, identity, version = 'standard', onProg
       : null;
     const identityH = identityBlock ? identityBlock.height : 0;
     const identityTop = identityBlock ? padY : 0;
-    const identityTextGap = identityBlock ? Math.round(lineHeight * 0.5) : 0;
+    const identityTextGap = identityBlock ? Math.max(12, Math.round(30 * scale)) : 0;
 
     const textTop = padY + identityH + identityTextGap;
     const rawBannerH = (lines.length || identityBlock)
       ? Math.ceil(padY + textTop + lines.length * lineHeight)
       : 0;
-    // With an identity block the total height must stay even for H.264/yuv420.
-    // Without one the original value is kept exactly, so the plain Standard
-    // banner height is unchanged.
+    // The total height must stay even for H.264/yuv420.
     const bannerH = isReel ? 0 : ((rawBannerH & ~1) || 2);
     const totalH = bannerH + outH;
     const reelStep = reelFontPx * 1.2;
@@ -366,7 +368,8 @@ export async function generateClip({ url, identity, version = 'standard', onProg
       });
     } else {
       if (identityBlock) bctx.drawImage(identityBlock.canvas, padX, identityTop);
-      lines.forEach((line, i) => bctx.fillText(line, outW / 2, textTop + i * lineHeight));
+      bctx.textAlign = 'left';
+      lines.forEach((line, i) => bctx.fillText(line, padX, textTop + i * lineHeight));
     }
     bctx.shadowColor = 'transparent';
     bctx.shadowBlur = 0;
