@@ -18,9 +18,17 @@ const withoutBranding = document.getElementById('withoutBranding');
 const sizeInputs = Array.from(document.querySelectorAll('input[name="maxFileSize"]'));
 const sizeDescription = document.getElementById('sizeDescription');
 const sizeWarning = document.getElementById('sizeWarning');
+const generationHint = document.getElementById('generationHint');
 const layoutInputs = Array.from(document.querySelectorAll('input[name="version"]'));
 let generating = false;
 let objectUrl;
+let generationHintTimer;
+
+function resetGenerationHint() {
+  clearTimeout(generationHintTimer);
+  generationHint.hidden = true;
+  generationHint.open = false;
+}
 
 // Advertising never controls generation or downloads.
 if (matchMedia('(min-width: 1201px)').matches) {
@@ -187,6 +195,8 @@ generateBtn.addEventListener('click', async () => {
   const url = input.value.trim();
   if (!url) { statusDiv.textContent = 'Paste a valid X/Twitter post URL.'; return; }
   setBusy(true);
+  resetGenerationHint();
+  generationHintTimer = setTimeout(() => { generationHint.hidden = false; }, 15000);
   previewContainer.classList.remove('active');
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 600_000);
@@ -236,6 +246,7 @@ generateBtn.addEventListener('click', async () => {
     statusDiv.textContent = error.name === 'AbortError' ? 'Generation timed out.' : error.message || 'Could not generate the clip.';
   } finally {
     clearTimeout(timeoutId);
+    resetGenerationHint();
     setBusy(false);
   }
 });
