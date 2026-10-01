@@ -89,14 +89,14 @@
     .size-warning { margin: 10px 0 0; padding: 10px 12px; border: 1px solid #9a741f; border-radius: 8px; color: #f1d27a; font-size: 12px; line-height: 1.5; }
     .size-warning[data-level="strong"] { border-color: var(--error); color: #ffb4ad; }
     .size-warning[hidden] { display: none; }
-    .generation-hint { margin: 10px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+    .generation-hint { max-width: 330px; margin: 30px 0 0; padding: 14px 16px; border: 1px solid rgb(226 105 120 / 42%); border-radius: 10px; background: rgb(86 28 40 / 28%); color: #d9b7bc; font-size: 12px; line-height: 1.5; }
     .generation-hint[hidden] { display: none; }
     .generation-hint summary { display: inline-flex; align-items: center; gap: 7px; cursor: pointer; list-style: none; }
     .generation-hint summary::-webkit-details-marker { display: none; }
-    .generation-hint summary:hover { color: var(--text); }
+    .generation-hint summary:hover { color: #f0d9dc; }
     .generation-hint summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 4px; }
     .generation-hint__icon { display: inline-grid; place-items: center; width: 16px; height: 16px; border: 1px solid currentColor; border-radius: 50%; font-size: 11px; font-weight: 700; line-height: 1; }
-    .generation-hint p { max-width: 52ch; margin: 8px 0 0 23px; color: var(--muted); }
+    .generation-hint p { max-width: 52ch; margin: 9px 0 0 23px; color: #d9b7bc; }
     .version-group { display: flex; gap: 12px; border: 0; padding: 0; margin: 0 0 24px; min-width: 0; }
     .version-group legend { padding: 0; margin-bottom: 10px; }
     .version-group label { position: relative; display: flex; flex: 1; align-items: center; gap: 12px; min-width: 0; min-height: 90px; margin: 0; padding: 14px 30px 14px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--field); cursor: pointer; }
@@ -189,9 +189,11 @@
       a, button, input, .version-group label, .size-option, .size-tooltip, summary { transition: color 140ms ease, background-color 140ms ease, border-color 140ms ease, opacity 140ms ease, transform 140ms ease; }
       #generateBtn:disabled::before { animation: processing 800ms linear infinite; }
       .preview-container.active { animation: result-in 180ms ease-out; }
+      .generation-hint:not([hidden]) { animation: generation-hint-in 180ms ease-out; }
     }
     @keyframes processing { to { transform: rotate(360deg); } }
     @keyframes result-in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes generation-hint-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
     @media (min-width: 1201px) and (max-width: 1439px) {
       .site-header, main, .site-footer { max-width: calc(100vw - 384px); }
       .workspace { grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.3fr); gap: 32px; padding-top: 48px; }
@@ -265,6 +267,10 @@
     <h1>Turn posts into <span>shareable clips.</span></h1>
     <p class="tagline">Keep the text. Keep the video. Create a ready-to-share MP4 in your browser.</p>
     <p class="intro-note">Free to use. No account needed.</p>
+    <details id="generationHint" class="generation-hint" hidden>
+      <summary><span class="generation-hint__icon" aria-hidden="true">i</span>Generation taking longer than expected?</summary>
+      <p>Generation speed can vary by browser. ClipTweet processes videos locally through browser video APIs; in our testing, Chrome has generally been faster while Brave may take longer on some devices because browsers can use different hardware-accelerated or software encoding paths. If generation is unusually slow, trying the latest Chrome may help.</p>
+    </details>
   </div>
   <div class="card">
     <div class="tool-heading"><h2>Create your clip</h2><span>MP4</span></div>
@@ -311,11 +317,6 @@
     </div>
     <button id="generateBtn" class="btn-primary">Generate Clip</button>
     <div id="status" class="status" role="status" aria-live="polite"></div>
-    <details id="generationHint" class="generation-hint" hidden>
-      <summary><span class="generation-hint__icon" aria-hidden="true">i</span>Generation taking longer than expected?</summary>
-      <p>Generation speed can vary by browser. ClipTweet processes videos locally through browser video APIs; in our testing, Chrome has generally been faster while Brave may take longer on some devices because browsers can use different hardware-accelerated or software encoding paths. If generation is unusually slow, trying the latest Chrome may help.</p>
-    </details>
-
     <div id="previewContainer" class="preview-container">
       <video id="previewVideo" class="preview-video" controls muted playsinline></video>
       <p class="preview-note">Black bars may appear in the preview, but they won't be included in the downloaded video.</p>

@@ -196,7 +196,7 @@ generateBtn.addEventListener('click', async () => {
   if (!url) { statusDiv.textContent = 'Paste a valid X/Twitter post URL.'; return; }
   setBusy(true);
   resetGenerationHint();
-  generationHintTimer = setTimeout(() => { generationHint.hidden = false; }, 15000);
+  generationHintTimer = setTimeout(() => { generationHint.hidden = false; }, 5000);
   previewContainer.classList.remove('active');
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 600_000);
