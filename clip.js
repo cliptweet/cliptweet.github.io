@@ -486,7 +486,7 @@ export async function generateClip({ url, identity, version = 'standard', brandi
         hardwareAccelerationPreference = 'default';
         console.info('[ClipTweet] Hardware acceleration preference unavailable; using default encoder configuration');
       }
-      const fallbackConfig = { ...baseConfig };
+      const { hardwareAcceleration: _ignored, ...fallbackConfig } = baseConfig;
       const fallbackOutput = createOutput();
       const fallback = await Conversion.init({ input, output: fallbackOutput, video: fallbackConfig });
       return { output: fallbackOutput, conversion: fallback, config: fallbackConfig };
@@ -573,13 +573,28 @@ export async function generateClip({ url, identity, version = 'standard', brandi
       }
       const slotStart = attemptIndex === 0 ? 0 : 85 + (attemptIndex - 1) * 7;
       const slotEnd = attemptIndex === 0 ? 85 : attemptIndex === 1 ? 92 : 99;
-      conversion.onProgress = (p) => {
+      const onEncodingProgress = (p) => {
         const percent = Math.min(99, Math.max(lastEncodingProgress, Math.round(slotStart + (slotEnd - slotStart) * p)));
         lastEncodingProgress = percent;
         onProgress?.(`Encoding your clip... ${percent}%`, percent / 100);
       };
+      conversion.onProgress = onEncodingProgress;
       timing(`encode started (attempt ${attemptIndex + 1})`);
-      await conversion.execute(signal ? { pauseSignal: signal } : undefined);
+      try {
+        await conversion.execute(signal ? { pauseSignal: signal } : undefined);
+      } catch (error) {
+        const hardwarePreferenceFailed = selectedVideoConfig.hardwareAcceleration === 'prefer-hardware'
+          && /prefer-hardware|hardware acceleration/i.test(String(error?.message || error));
+        if (!hardwarePreferenceFailed) throw error;
+        hardwareAccelerationPreference = 'default';
+        console.info('[ClipTweet] prefer-hardware unsupported; falling back to default encoder.');
+        const fallback = await initVideoConversion(selectedVideoConfig);
+        output = fallback.output;
+        conversion = fallback.conversion;
+        selectedVideoConfig = fallback.config;
+        conversion.onProgress = onEncodingProgress;
+        await conversion.execute(signal ? { pauseSignal: signal } : undefined);
+      }
       timing(`encode finished (attempt ${attemptIndex + 1})`);
       const blob = new Blob([output.target.buffer], { type: 'video/mp4' });
       timing(`output blob ready (${Math.round(blob.size / 1024 / 1024)} MB)`);
