@@ -544,7 +544,7 @@ export async function generateClip({ url, identity, version = 'standard', brandi
         output = new Output({ format: new Mp4OutputFormat(), target: new BufferTarget() });
         conversion = await Conversion.init({ input, output, video: selectedVideoConfig });
       }
-      conversion.onProgress = (p) => onProgress?.(`Encoding your clip... ${Math.round(p * 100)}%`, 0.15 + p * 0.8);
+      conversion.onProgress = (p) => onProgress?.(`Encoding your clip... ${Math.min(99, Math.round(p * 100))}%`, 0.15 + p * 0.8);
       timing(`encode started (attempt ${attemptIndex + 1})`);
       await conversion.execute(signal ? { pauseSignal: signal } : undefined);
       timing(`encode finished (attempt ${attemptIndex + 1})`);
