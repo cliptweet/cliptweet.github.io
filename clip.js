@@ -466,64 +466,6 @@ export async function generateClip({ url, identity, version = 'standard', brandi
     // user an audio-only file. Require a video track in the output, and fall
     // back through the remaining codecs before giving up.
     let output, conversion, selectedVideoConfig;
-    let hardwareAccelerationPreference = 'prefer-hardware';
-    let diagnosticsLogged = false;
-    const initVideoConversion = async (baseConfig) => {
-      const createOutput = () => new Output({ format: new Mp4OutputFormat(), target: new BufferTarget() });
-      const createAttempt = async (config) => {
-        let effectiveConfig;
-        let supportProbe;
-        const probedConfig = {
-          ...config,
-          onEncoderConfig: (encoderConfig) => {
-            effectiveConfig = encoderConfig;
-            if (typeof VideoEncoder?.isConfigSupported === 'function') {
-              supportProbe = VideoEncoder.isConfigSupported(encoderConfig);
-            }
-          },
-        };
-        const candidateOutput = createOutput();
-        const attempt = await Conversion.init({ input, output: candidateOutput, video: probedConfig });
-        const support = await supportProbe?.catch(() => null);
-        if (support && support.supported === false) {
-          await attempt.cancel().catch(() => {});
-          throw new Error('VideoEncoder configuration unsupported.');
-        }
-        if (!diagnosticsLogged) {
-          diagnosticsLogged = true;
-          console.info('[ClipTweet diagnostics]', {
-            userAgent: navigator.userAgent,
-            hardwareConcurrency: navigator.hardwareConcurrency,
-            deviceMemory: navigator.deviceMemory,
-            crossOriginIsolated: globalThis.crossOriginIsolated,
-            videoEncoder: typeof VideoEncoder,
-            codec: effectiveConfig?.codec,
-            width: effectiveConfig?.width,
-            height: effectiveConfig?.height,
-            bitrate: effectiveConfig?.bitrate,
-            framerate: effectiveConfig?.framerate,
-            hardwareAcceleration: effectiveConfig?.hardwareAcceleration,
-            support,
-          });
-        }
-        return { output: candidateOutput, conversion: attempt, config: probedConfig };
-      };
-
-      if (hardwareAccelerationPreference === 'prefer-hardware') {
-        try {
-          console.info('[ClipTweet] Hardware acceleration preference: requested');
-          const preferred = await createAttempt({ ...baseConfig, hardwareAcceleration: 'prefer-hardware' });
-          console.info('[ClipTweet] Hardware acceleration preference: accepted (actual hardware use is runtime-dependent)');
-          return preferred;
-        } catch {
-          hardwareAccelerationPreference = 'default';
-          console.info('[ClipTweet] prefer-hardware unsupported; falling back to default encoder.');
-        }
-      }
-
-      const { hardwareAcceleration: _ignored, onEncoderConfig: _ignoredHook, ...fallbackConfig } = baseConfig;
-      return createAttempt(fallbackConfig);
-    };
     for (const codec of codecOrder) {
       let encodable = false;
       try { encodable = await canEncodeVideo(codec, { width: outW, height: totalH }); }
@@ -567,13 +509,14 @@ export async function generateClip({ url, identity, version = 'standard', brandi
         processedWidth: outW,
         processedHeight: totalH,
       };
-      // No audio options: the X source is already AAC, so Mediabunny copies
-      // the track untouched. Forcing a transcode here silently dropped audio
-      // on devices without an encoder for the source's channel/rate pairing.
-      const initialized = await initVideoConversion(videoConfig);
-      const candidateOutput = initialized.output;
-      const attempt = initialized.conversion;
-      const activeVideoConfig = initialized.config;
+      const candidateOutput = new Output({ format: new Mp4OutputFormat(), target: new BufferTarget() });
+      const attempt = await Conversion.init({
+        input, output: candidateOutput,
+        video: videoConfig,
+        // No audio options: the X source is already AAC, so Mediabunny copies
+        // the track untouched. Forcing a transcode here silently dropped audio
+        // on devices without an encoder for the source's channel/rate pairing.
+      });
       timing(`encoder initialized (${codec})`);
 
       const discarded = attempt.discardedTracks.map((d) => `${d.track.type}:${d.reason}`);
@@ -582,7 +525,7 @@ export async function generateClip({ url, identity, version = 'standard', brandi
       if (attempt.isValid && attempt.utilizedTracks.some((t) => t.type === 'video')) {
         output = candidateOutput;
         conversion = attempt;
-        selectedVideoConfig = activeVideoConfig;
+        selectedVideoConfig = videoConfig;
         break;
       }
       await attempt.cancel().catch(() => {});
@@ -599,10 +542,8 @@ export async function generateClip({ url, identity, version = 'standard', brandi
       if (attemptIndex > 0) {
         bitrateBps = Math.max(60_000, Math.floor(bitrateBps * 0.85));
         selectedVideoConfig.quality = new Quality({ bitrate: bitrateBps });
-        const retry = await initVideoConversion(selectedVideoConfig);
-        output = retry.output;
-        conversion = retry.conversion;
-        selectedVideoConfig = retry.config;
+        output = new Output({ format: new Mp4OutputFormat(), target: new BufferTarget() });
+        conversion = await Conversion.init({ input, output, video: selectedVideoConfig });
       }
       const slotStart = attemptIndex === 0 ? 0 : 85 + (attemptIndex - 1) * 7;
       const slotEnd = attemptIndex === 0 ? 85 : attemptIndex === 1 ? 92 : 99;
@@ -612,32 +553,10 @@ export async function generateClip({ url, identity, version = 'standard', brandi
         onProgress?.(`Encoding your clip... ${percent}%`, percent / 100);
       };
       timing(`encode started (attempt ${attemptIndex + 1})`);
-      try {
-        await conversion.execute(signal ? { pauseSignal: signal } : undefined);
-      } catch (error) {
-        const hardwarePreferenceFailed = selectedVideoConfig.hardwareAcceleration === 'prefer-hardware'
-          && /prefer-hardware|hardware acceleration/i.test(String(error?.message || error));
-        if (!hardwarePreferenceFailed) throw error;
-        hardwareAccelerationPreference = 'default';
-        console.info('[ClipTweet] prefer-hardware unsupported; falling back to default encoder.');
-        const fallback = await initVideoConversion(selectedVideoConfig);
-        output = fallback.output;
-        conversion = fallback.conversion;
-        selectedVideoConfig = fallback.config;
-        conversion.onProgress = (p) => {
-          const percent = Math.min(99, Math.max(lastEncodingProgress, Math.round(slotStart + (slotEnd - slotStart) * p)));
-          lastEncodingProgress = percent;
-          onProgress?.(`Encoding your clip... ${percent}%`, percent / 100);
-        };
-        await conversion.execute(signal ? { pauseSignal: signal } : undefined);
-      }
+      await conversion.execute(signal ? { pauseSignal: signal } : undefined);
       timing(`encode finished (attempt ${attemptIndex + 1})`);
       const blob = new Blob([output.target.buffer], { type: 'video/mp4' });
       timing(`output blob ready (${Math.round(blob.size / 1024 / 1024)} MB)`);
-      console.info('[ClipTweet diagnostics]', {
-        totalGenerationMs: Math.round(performance.now() - profileStartedAt),
-        encodeQueueSize: 'not exposed by Mediabunny',
-      });
       if (!bestBlob || blob.size < bestBlob.size) bestBlob = blob;
       if (blob.size < maxBytes) return { blob, text: bannerText, lines, author: data.author, handle: data.handle };
     }
