@@ -232,6 +232,8 @@ async function buildIdentityBlock(avatarUrl, label, fontPx, maxWidth) {
 export async function generateClip({ url, identity, version = 'standard', branding = true, maxBytes = DEFAULT_MAX_OUTPUT_BYTES, onProgress, onWarning, signal }) {
   if (!['standard', 'reel'].includes(version)) throw new Error('Choose a supported video layout.');
   const isReel = version === 'reel';
+  const profileStartedAt = performance.now();
+  const timing = label => console.debug('[clip timing]', label, `${Math.round(performance.now() - profileStartedAt)}ms`);
   if (typeof VideoEncoder === 'undefined') {
     throw new Error('This browser cannot encode video. Update to a recent Chrome, Edge or Safari 16.4+.');
   }
@@ -255,6 +257,7 @@ export async function generateClip({ url, identity, version = 'standard', brandi
   } catch (err) {
     throw err;
   }
+  timing('metadata resolved');
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || 'Could not read that post.');
   if (Number(data.durationMs || 0) > MAX_DURATION_SEC * 1000) throw new Error('ClipTweet currently supports videos up to 10 minutes.');
@@ -282,6 +285,7 @@ export async function generateClip({ url, identity, version = 'standard', brandi
 
   try {
     const videoTrack = await input.getPrimaryVideoTrack();
+    timing('source track loaded');
     if (!videoTrack) throw new Error('That post has no video track.');
 
     // X animated GIF posts are exposed as silent MP4 variants. When X omits
@@ -343,6 +347,7 @@ export async function generateClip({ url, identity, version = 'standard', brandi
     const identityBlock = hasIdentity
       ? await buildIdentityBlock(identity.avatar, name, fontPx, outW - padX * 2)
       : null;
+    timing('composition prepared');
     const identityH = identityBlock ? identityBlock.height : 0;
     const identityTop = identityBlock ? padY : 0;
     const identityTextGap = identityBlock ? Math.max(12, Math.round(30 * scale)) : 0;
@@ -512,6 +517,7 @@ export async function generateClip({ url, identity, version = 'standard', brandi
         // the track untouched. Forcing a transcode here silently dropped audio
         // on devices without an encoder for the source's channel/rate pairing.
       });
+      timing(`encoder initialized (${codec})`);
 
       const discarded = attempt.discardedTracks.map((d) => `${d.track.type}:${d.reason}`);
       if (discarded.length) console.warn(`clip: discarded tracks (${codec}) — ${discarded.join(', ')}`);
@@ -539,8 +545,11 @@ export async function generateClip({ url, identity, version = 'standard', brandi
         conversion = await Conversion.init({ input, output, video: selectedVideoConfig });
       }
       conversion.onProgress = (p) => onProgress?.(`Encoding your clip... ${Math.round(p * 100)}%`, 0.15 + p * 0.8);
+      timing(`encode started (attempt ${attemptIndex + 1})`);
       await conversion.execute(signal ? { pauseSignal: signal } : undefined);
+      timing(`encode finished (attempt ${attemptIndex + 1})`);
       const blob = new Blob([output.target.buffer], { type: 'video/mp4' });
+      timing(`output blob ready (${Math.round(blob.size / 1024 / 1024)} MB)`);
       if (!bestBlob || blob.size < bestBlob.size) bestBlob = blob;
       if (blob.size < maxBytes) return { blob, text: bannerText, lines, author: data.author, handle: data.handle };
     }
