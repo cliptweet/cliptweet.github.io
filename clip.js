@@ -229,11 +229,64 @@ async function buildIdentityBlock(avatarUrl, label, fontPx, maxWidth) {
 
 // ── Main pipeline ────────────────────────────────────────────────────────────
 
-export async function generateClip({ url, identity, version = 'standard', branding = true, maxBytes = DEFAULT_MAX_OUTPUT_BYTES, onProgress, onWarning, signal }) {
+export async function generateClip({ url, identity, version = 'standard', branding = true, maxBytes = DEFAULT_MAX_OUTPUT_BYTES, onProgress, onWarning, signal, generationStartedAt, profileResolutionMs = 0 }) {
   if (!['standard', 'reel'].includes(version)) throw new Error('Choose a supported video layout.');
   const isReel = version === 'reel';
   const profileStartedAt = performance.now();
   const timing = label => console.debug('[clip timing]', label, `${Math.round(performance.now() - profileStartedAt)}ms`);
+  const diagnosticNow = () => { try { return performance.now(); } catch { return 0; } };
+  const layoutSetupStartedAt = diagnosticNow();
+  let compositionMs = 0;
+  let encodeMs = 0;
+  let finalizationMs = 0;
+  const passDurationsMs = [];
+  const passBitrates = [];
+  const passBlobBytes = [];
+  const passExceededMax = [];
+  const codecChecks = [];
+  let selectedCodec = null;
+  let sourceFps = null;
+  let sourceDurationSec = 0;
+  let outputWidth = 0;
+  let outputHeight = 0;
+  let outputPixelsPerFrame = 0;
+  let layoutSetupMs = 0;
+  let diagnosticsEmitted = false;
+  const emitDiagnostics = (finalOutputBytes = null) => {
+    if (diagnosticsEmitted) return;
+    diagnosticsEmitted = true;
+    try {
+      console.info('[ClipTweet generation diagnostics]', {
+        layout: isReel ? 'Reel' : 'Standard',
+        sourceWidth: srcW,
+        sourceHeight: srcH,
+        outputWidth,
+        outputHeight,
+        outputPixelsPerFrame,
+        sourceFps,
+        sourceDurationSec,
+        selectedCodec,
+        selectedBitrate: passBitrates[0] || null,
+        maxBytes,
+        profilePersonalization: Boolean(identity && !isReel),
+        profileResolutionMs: Math.round(profileResolutionMs || 0),
+        layoutSetupMs: Math.round(layoutSetupMs),
+        compositionMs: Math.round(compositionMs),
+        encodeConversionMs: Math.round(encodeMs),
+        muxFinalizationMs: Math.round(finalizationMs),
+        totalGenerationMs: Math.round(diagnosticNow() - (Number(generationStartedAt) || profileStartedAt)),
+        codecChecks,
+        passes: passDurationsMs.map((durationMs, index) => ({
+          pass: index + 1,
+          durationMs: Math.round(durationMs),
+          bitrate: passBitrates[index],
+          blobBytes: passBlobBytes[index],
+          exceededMaxBytes: passExceededMax[index],
+        })),
+        finalOutputBytes,
+      });
+    } catch { /* diagnostics must never affect generation */ }
+  };
   if (typeof VideoEncoder === 'undefined') {
     throw new Error('This browser cannot encode video. Update to a recent Chrome, Edge or Safari 16.4+.');
   }
@@ -296,6 +349,8 @@ export async function generateClip({ url, identity, version = 'standard', brandi
     }
     if (durationSec > MAX_DURATION_SEC) throw new Error('That video is longer than 10 minutes.');
     if (!durationSec) throw new Error('Could not determine the video duration.');
+    sourceDurationSec = durationSec;
+    sourceFps = Number(videoTrack.frameRate || 0) || null;
     const sourceSizeBytes = Number(data.sourceSizeBytes || data.fileSize || 0)
       || (Number(variant.bitrate || 0) * durationSec / 8);
     const notice = compressionNotice(sourceSizeBytes, maxBytes);
@@ -310,6 +365,7 @@ export async function generateClip({ url, identity, version = 'standard', brandi
     // Even width/height keeps H.264 encoders happy.
     const outW = Math.max(2, isReel ? srcW : Math.min(profile.width, srcW)) & ~1;
     const outH = Math.max(2, Math.round(outW * (srcH / srcW)) & ~1);
+    outputWidth = outW;
 
     // Banner metrics scale with the frame, so the text keeps the same share of
     // the width and the same on-screen size as the 320px-era original.
@@ -449,6 +505,9 @@ export async function generateClip({ url, identity, version = 'standard', brandi
         console.warn('clip: Standard card unavailable; using the previous layout.', error);
       }
     }
+    outputHeight = totalH;
+    outputPixelsPerFrame = outW * totalH;
+    layoutSetupMs = diagnosticNow() - layoutSetupStartedAt;
 
     const frame = document.createElement('canvas');
     frame.width = outW; frame.height = totalH;
@@ -466,10 +525,20 @@ export async function generateClip({ url, identity, version = 'standard', brandi
     // user an audio-only file. Require a video track in the output, and fall
     // back through the remaining codecs before giving up.
     let output, conversion, selectedVideoConfig;
+    const viewport = card || { x: 0, y: isReel ? 0 : bannerH, width: outW, height: outH };
+    const viewportAspect = viewport.width / viewport.height;
+    const mediaAspect = srcW / srcH;
+    const cover = Math.max(viewport.width / srcW, viewport.height / srcH);
+    const drawWidth = srcW * cover;
+    const drawHeight = srcH * cover;
+    const drawX = viewport.x + (viewport.width - drawWidth) / 2;
+    const drawY = viewport.y + (viewport.height - drawHeight) / 2;
+    const exactAspect = Math.abs(mediaAspect - viewportAspect) < 1e-9;
     for (const codec of codecOrder) {
       let encodable = false;
       try { encodable = await canEncodeVideo(codec, { width: outW, height: totalH }); }
       catch { encodable = false; }
+      codecChecks.push({ codec, supported: encodable });
       if (!encodable) continue;
 
       const videoConfig = {
@@ -479,32 +548,32 @@ export async function generateClip({ url, identity, version = 'standard', brandi
         // output size, so any automatic resize stage would rescale the banner.
         quality: new Quality({ bitrate: Math.round(videoKbps * 1000) }),
         process: (sample) => {
-          const viewport = card || { x: 0, y: isReel ? 0 : bannerH, width: outW, height: outH };
-          if (card) fctx.drawImage(card.decoration, 0, bannerH, outW, card.cardH);
-          fctx.save();
+          const compositionStartedAt = diagnosticNow();
           try {
-            if (card) fctx.clip(card.mask);
-            else {
-              fctx.beginPath();
-              fctx.rect(viewport.x, viewport.y, viewport.width, viewport.height);
-              fctx.clip();
-            }
-            // Uniform scale + centred excess: fills the viewport without
-            // stretching, including rounding differences and rotated samples.
-            const mediaAspect = sample.displayWidth / sample.displayHeight;
-            const viewportAspect = viewport.width / viewport.height;
-            if (Math.abs(mediaAspect - viewportAspect) < 1e-9) {
-              sample.draw(fctx, viewport.x, viewport.y, viewport.width, viewport.height);
-            } else {
-              const cover = Math.max(viewport.width / sample.displayWidth, viewport.height / sample.displayHeight);
-              const width = sample.displayWidth * cover, height = sample.displayHeight * cover;
-              sample.draw(fctx, viewport.x + (viewport.width - width) / 2, viewport.y + (viewport.height - height) / 2, width, height);
-            }
-          } finally { fctx.restore(); }
-          // Graphics are composited at final resolution after media fitting.
-          if (!isReel && bannerH) fctx.drawImage(banner, 0, 0, outW, bannerH);
-          if (isReel && lines.length) fctx.drawImage(banner, 0, reelTop, outW, reelLayerH);
-          return frame;
+            if (card) fctx.drawImage(card.decoration, 0, bannerH, outW, card.cardH);
+            fctx.save();
+            try {
+              if (card) fctx.clip(card.mask);
+              else {
+                fctx.beginPath();
+                fctx.rect(viewport.x, viewport.y, viewport.width, viewport.height);
+                fctx.clip();
+              }
+              // Uniform scale + centred excess: fills the viewport without
+              // stretching, including rounding differences and rotated samples.
+              if (exactAspect) {
+                sample.draw(fctx, viewport.x, viewport.y, viewport.width, viewport.height);
+              } else {
+                sample.draw(fctx, drawX, drawY, drawWidth, drawHeight);
+              }
+            } finally { fctx.restore(); }
+            // Graphics are composited at final resolution after media fitting.
+            if (!isReel && bannerH) fctx.drawImage(banner, 0, 0, outW, bannerH);
+            if (isReel && lines.length) fctx.drawImage(banner, 0, reelTop, outW, reelLayerH);
+            return frame;
+          } finally {
+            compositionMs += diagnosticNow() - compositionStartedAt;
+          }
         },
         processedWidth: outW,
         processedHeight: totalH,
@@ -526,6 +595,7 @@ export async function generateClip({ url, identity, version = 'standard', brandi
         output = candidateOutput;
         conversion = attempt;
         selectedVideoConfig = videoConfig;
+        selectedCodec = codec;
         break;
       }
       await attempt.cancel().catch(() => {});
@@ -553,13 +623,26 @@ export async function generateClip({ url, identity, version = 'standard', brandi
         onProgress?.(`Encoding your clip... ${percent}%`, percent / 100);
       };
       timing(`encode started (attempt ${attemptIndex + 1})`);
+      const passStartedAt = diagnosticNow();
       await conversion.execute(signal ? { pauseSignal: signal } : undefined);
+      const passDurationMs = diagnosticNow() - passStartedAt;
+      encodeMs += passDurationMs;
       timing(`encode finished (attempt ${attemptIndex + 1})`);
+      const finalizeStartedAt = diagnosticNow();
       const blob = new Blob([output.target.buffer], { type: 'video/mp4' });
+      finalizationMs += diagnosticNow() - finalizeStartedAt;
       timing(`output blob ready (${Math.round(blob.size / 1024 / 1024)} MB)`);
+      passDurationsMs.push(passDurationMs);
+      passBitrates.push(bitrateBps);
+      passBlobBytes.push(blob.size);
+      passExceededMax.push(blob.size >= maxBytes);
       if (!bestBlob || blob.size < bestBlob.size) bestBlob = blob;
-      if (blob.size < maxBytes) return { blob, text: bannerText, lines, author: data.author, handle: data.handle };
+      if (blob.size < maxBytes) {
+        emitDiagnostics(blob.size);
+        return { blob, text: bannerText, lines, author: data.author, handle: data.handle };
+      }
     }
+    emitDiagnostics(bestBlob?.size || null);
     onWarning?.({ level: 'strong', message: 'The generated clip is still above the selected maximum after three compression attempts. Quality was preserved as much as possible; choose a larger limit for a smaller file.', recommendation: '' });
     return { blob: bestBlob, text: bannerText, lines, author: data.author, handle: data.handle };
   } finally {

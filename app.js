@@ -200,6 +200,8 @@ generateBtn.addEventListener('click', async () => {
   previewContainer.classList.remove('active');
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 600_000);
+  const generationStartedAt = performance.now();
+  let profileResolutionMs = 0;
   let identity = null;
   try {
     // A resolve still in flight gets a short grace period; after that the clip
@@ -207,10 +209,12 @@ generateBtn.addEventListener('click', async () => {
     const typedName = displayNameInput.value.trim();
     const version = layoutInputs.find(radio => radio.checked)?.value || 'standard';
     if (version === 'standard' && profileUrlInput.value.trim() && typedName) {
+      const profileStartedAt = performance.now();
       const settled = await Promise.race([
         runProfileResolve(),
         new Promise(resolve => setTimeout(() => resolve({ timeout: true }), PROFILE_WAIT_MS)),
       ]);
+      profileResolutionMs = performance.now() - profileStartedAt;
       if (!settled?.timeout && settled?.handle && settled.avatar) {
         identity = { avatar: settled.avatar, name: typedName };
       } else {
@@ -226,7 +230,7 @@ generateBtn.addEventListener('click', async () => {
     sizeWarning.hidden = true;
     sizeWarning.textContent = '';
     sizeWarning.dataset.level = '';
-    const result = await generateClip({ url, version, branding: !withoutBranding.checked, identity: version === 'standard' ? identity : null, maxBytes, signal: controller.signal, onProgress: message => { statusDiv.textContent = message; }, onWarning: notice => { sizeWarning.textContent = [notice.message, notice.recommendation].filter(Boolean).join(' '); sizeWarning.dataset.level = notice.level; sizeWarning.hidden = false; } });
+    const result = await generateClip({ url, version, branding: !withoutBranding.checked, identity: version === 'standard' ? identity : null, maxBytes, signal: controller.signal, generationStartedAt, profileResolutionMs, onProgress: message => { statusDiv.textContent = message; }, onWarning: notice => { sizeWarning.textContent = [notice.message, notice.recommendation].filter(Boolean).join(' '); sizeWarning.dataset.level = notice.level; sizeWarning.hidden = false; } });
     statusDiv.textContent = 'Encoding your clip... 100%';
     await new Promise(requestAnimationFrame);
     if (objectUrl) URL.revokeObjectURL(objectUrl);
