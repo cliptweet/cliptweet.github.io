@@ -466,13 +466,37 @@ export async function generateClip({ url, identity, version = 'standard', brandi
     // user an audio-only file. Require a video track in the output, and fall
     // back through the remaining codecs before giving up.
     let output, conversion, selectedVideoConfig;
+    let hardwareAccelerationPreference = 'prefer-hardware';
+    const initVideoConversion = async (baseConfig) => {
+      const createOutput = () => new Output({ format: new Mp4OutputFormat(), target: new BufferTarget() });
+      if (hardwareAccelerationPreference === 'prefer-hardware') {
+        const preferredConfig = { ...baseConfig, hardwareAcceleration: 'prefer-hardware' };
+        const preferredOutput = createOutput();
+        console.info('[ClipTweet] Hardware acceleration preference: requested');
+        try {
+          const preferred = await Conversion.init({ input, output: preferredOutput, video: preferredConfig });
+          if (preferred.isValid && preferred.utilizedTracks.some((t) => t.type === 'video')) {
+            console.info('[ClipTweet] Hardware acceleration preference: accepted (actual hardware use is runtime-dependent)');
+            return { output: preferredOutput, conversion: preferred, config: preferredConfig };
+          }
+          await preferred.cancel().catch(() => {});
+        } catch {
+          // Retry below with the exact prior configuration.
+        }
+        hardwareAccelerationPreference = 'default';
+        console.info('[ClipTweet] Hardware acceleration preference unavailable; using default encoder configuration');
+      }
+      const fallbackConfig = { ...baseConfig };
+      const fallbackOutput = createOutput();
+      const fallback = await Conversion.init({ input, output: fallbackOutput, video: fallbackConfig });
+      return { output: fallbackOutput, conversion: fallback, config: fallbackConfig };
+    };
     for (const codec of codecOrder) {
       let encodable = false;
       try { encodable = await canEncodeVideo(codec, { width: outW, height: totalH }); }
       catch { encodable = false; }
       if (!encodable) continue;
 
-      const candidateOutput = new Output({ format: new Mp4OutputFormat(), target: new BufferTarget() });
       const videoConfig = {
         codec,
         forceTranscode: true,
@@ -510,13 +534,13 @@ export async function generateClip({ url, identity, version = 'standard', brandi
         processedWidth: outW,
         processedHeight: totalH,
       };
-      const attempt = await Conversion.init({
-        input, output: candidateOutput,
-        video: videoConfig,
-        // No audio options: the X source is already AAC, so Mediabunny copies
-        // the track untouched. Forcing a transcode here silently dropped audio
-        // on devices without an encoder for the source's channel/rate pairing.
-      });
+      // No audio options: the X source is already AAC, so Mediabunny copies
+      // the track untouched. Forcing a transcode here silently dropped audio
+      // on devices without an encoder for the source's channel/rate pairing.
+      const initialized = await initVideoConversion(videoConfig);
+      const candidateOutput = initialized.output;
+      const attempt = initialized.conversion;
+      const activeVideoConfig = initialized.config;
       timing(`encoder initialized (${codec})`);
 
       const discarded = attempt.discardedTracks.map((d) => `${d.track.type}:${d.reason}`);
@@ -525,7 +549,7 @@ export async function generateClip({ url, identity, version = 'standard', brandi
       if (attempt.isValid && attempt.utilizedTracks.some((t) => t.type === 'video')) {
         output = candidateOutput;
         conversion = attempt;
-        selectedVideoConfig = videoConfig;
+        selectedVideoConfig = activeVideoConfig;
         break;
       }
       await attempt.cancel().catch(() => {});
@@ -542,8 +566,10 @@ export async function generateClip({ url, identity, version = 'standard', brandi
       if (attemptIndex > 0) {
         bitrateBps = Math.max(60_000, Math.floor(bitrateBps * 0.85));
         selectedVideoConfig.quality = new Quality({ bitrate: bitrateBps });
-        output = new Output({ format: new Mp4OutputFormat(), target: new BufferTarget() });
-        conversion = await Conversion.init({ input, output, video: selectedVideoConfig });
+        const retry = await initVideoConversion(selectedVideoConfig);
+        output = retry.output;
+        conversion = retry.conversion;
+        selectedVideoConfig = retry.config;
       }
       const slotStart = attemptIndex === 0 ? 0 : 85 + (attemptIndex - 1) * 7;
       const slotEnd = attemptIndex === 0 ? 85 : attemptIndex === 1 ? 92 : 99;
