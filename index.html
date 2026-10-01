@@ -136,6 +136,7 @@
     .status:empty { display: none; }
     .preview-container { display: none; margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--line); }
     .preview-container.active { display: block; }
+    .preview-note { color: var(--muted); font-size: 12px; line-height: 1.5; margin: 10px 0 0; }
     .result-heading { font-size: 15px; font-weight: 650; margin: 0 0 12px; }
     .preview-video { display: block; width: 100%; max-height: 580px; background: var(--field); border-radius: 10px; border: 1px solid var(--line); object-fit: contain; }
     .download-section { margin-top: 14px; }
@@ -307,6 +308,7 @@
     <div id="previewContainer" class="preview-container">
       <h3 class="result-heading">Your clip is ready</h3>
       <video id="previewVideo" class="preview-video" controls muted playsinline></video>
+      <p class="preview-note">Black bars may appear in the preview, but they won't be included in the downloaded video.</p>
       <div class="download-section">
         <button id="downloadBtn" class="btn-primary download-btn">Download MP4</button>
       </div>
