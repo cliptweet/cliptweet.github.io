@@ -68,6 +68,27 @@
     #tweetUrl::placeholder, .personalize__field input::placeholder { color: var(--muted); opacity: 1; }
     #tweetUrl:focus, .personalize__field input:focus { outline: 2px solid var(--accent); outline-offset: 2px; border-color: var(--accent); }
     .input-hint { font-size: 12px; line-height: 1.5; color: var(--muted); margin: 10px 0 24px; }
+    .size-group { border: 0; padding: 0; margin: 0 0 30px; min-width: 0; }
+    .size-group legend { color: var(--text); font-size: 14px; font-weight: 550; padding: 0; margin-bottom: 10px; }
+    .size-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .size-option { position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; min-width: 0; min-height: 64px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--field); }
+    .size-option:hover { background: var(--raised); }
+    .size-option:has(input:checked) { border-color: var(--accent); background: #1b3348; box-shadow: inset 0 0 0 1px var(--accent); }
+    .size-option:has(input:focus-visible), .size-help:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+    .size-option:has(input:disabled) { opacity: 0.6; }
+    .size-option input { width: 17px; height: 17px; margin: 0; accent-color: var(--accent); }
+    .size-option label { min-width: 0; margin: 0; cursor: pointer; }
+    .size-option strong, .size-option small { display: block; }
+    .size-option strong { font-size: 14px; line-height: 1.3; }
+    .size-option small { color: var(--muted); font-size: 12px; font-weight: 400; line-height: 1.4; margin-top: 3px; font-variant-numeric: tabular-nums; }
+    .size-help { position: relative; display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 1px solid var(--line); border-radius: 50%; background: transparent; color: var(--muted); font-family: inherit; font-size: 12px; font-weight: 650; line-height: 1; cursor: help; }
+    .size-help:hover { border-color: var(--accent); color: var(--accent); }
+    .size-tooltip { position: absolute; right: 0; bottom: calc(100% + 9px); z-index: 2; width: min(250px, calc(100vw - 64px)); padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--raised); color: var(--text); box-shadow: 0 10px 28px rgb(6 15 24 / 28%); font-size: 12px; font-weight: 400; line-height: 1.5; text-align: left; opacity: 0; visibility: hidden; transform: translateY(4px); pointer-events: none; }
+    .size-help:hover .size-tooltip, .size-help:focus-visible .size-tooltip { opacity: 1; visibility: visible; transform: translateY(0); }
+    .size-description { color: var(--muted); font-size: 12px; line-height: 1.5; margin: 10px 0 0; }
+    .size-warning { margin: 10px 0 0; padding: 10px 12px; border: 1px solid #9a741f; border-radius: 8px; color: #f1d27a; font-size: 12px; line-height: 1.5; }
+    .size-warning[data-level="strong"] { border-color: var(--error); color: #ffb4ad; }
+    .size-warning[hidden] { display: none; }
     .version-group { display: flex; gap: 12px; border: 0; padding: 0; margin: 0 0 24px; min-width: 0; }
     .version-group legend { padding: 0; margin-bottom: 10px; }
     .version-group label { position: relative; display: flex; flex: 1; align-items: center; gap: 12px; min-width: 0; min-height: 90px; margin: 0; padding: 14px 30px 14px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--field); cursor: pointer; }
@@ -157,7 +178,7 @@
     .site-footer p { margin: 0; }
     .site-footer nav { margin-left: auto; }
     @media (prefers-reduced-motion: no-preference) {
-      a, button, input, .version-group label, summary { transition: color 140ms ease, background-color 140ms ease, border-color 140ms ease, transform 140ms ease; }
+      a, button, input, .version-group label, .size-option, .size-tooltip, summary { transition: color 140ms ease, background-color 140ms ease, border-color 140ms ease, opacity 140ms ease, transform 140ms ease; }
       #generateBtn:disabled::before { animation: processing 800ms linear infinite; }
       .preview-container.active { animation: result-in 180ms ease-out; }
     }
@@ -183,6 +204,7 @@
       .guide-grid, .faq-section, .legal-grid { gap: 36px; padding-block: 36px; }
       .site-info h2 { font-size: 22px; }
     }
+    @media (max-width: 520px) { .size-options { grid-template-columns: 1fr; } }
     @media (max-width: 639px) {
       body { padding-inline: max(18px, env(safe-area-inset-left), env(safe-area-inset-right)); }
       .site-header { min-height: 72px; gap: 16px; }
@@ -243,6 +265,17 @@
       <input type="text" inputmode="url" id="tweetUrl" name="tweetUrl" placeholder="https://x.com/user/status/123456789" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="urlHint">
     </div>
     <p class="input-hint" id="urlHint">Paste the link to the X/Twitter post that contains the video or GIF.</p>
+    <fieldset class="size-group" aria-describedby="sizeDescription">
+      <legend>Maximum file size</legend>
+      <div class="size-options">
+        <div class="size-option"><input type="radio" id="sizeDiscord" name="maxFileSize" value="20971520" data-description="Best for compact clips shared in Discord." checked><label for="sizeDiscord"><strong>Discord</strong><small>20 MB</small></label><button class="size-help" type="button" aria-label="About the Discord file size" aria-describedby="tipDiscord">i<span class="size-tooltip" id="tipDiscord" role="tooltip">Targets 20 MB to keep clips compact for Discord sharing. Account limits can vary.</span></button></div>
+    <div class="size-option"><input type="radio" id="sizeWhatsApp" name="maxFileSize" value="104857600" data-description="More room for detail when sharing through WhatsApp."><label for="sizeWhatsApp"><strong>WhatsApp</strong><small>100 MB</small></label><button class="size-help" type="button" aria-label="About the WhatsApp file size" aria-describedby="tipWhatsApp">i<span class="size-tooltip" id="tipWhatsApp" role="tooltip">Uses a 100 MB ceiling to retain more detail for WhatsApp sharing without targeting a larger file.</span></button></div>
+    <div class="size-option"><input type="radio" id="sizeX" name="maxFileSize" value="536870912" data-description="A larger ceiling for higher-quality clips intended for X."><label for="sizeX"><strong>X</strong><small>512 MB</small></label><button class="size-help" type="button" aria-label="About the X file size" aria-describedby="tipX">i<span class="size-tooltip" id="tipX" role="tooltip">Uses a 512 MB ceiling for higher-quality X uploads. Account and platform rules can still vary.</span></button></div>
+    <div class="size-option"><input type="radio" id="sizeShortForm" name="maxFileSize" value="4294967296" data-description="The largest preset, intended to preserve maximum visual quality."><label for="sizeShortForm"><strong>TikTok / Instagram</strong><small>4 GB</small></label><button class="size-help" type="button" aria-label="About the TikTok and Instagram file size" aria-describedby="tipShortForm">i<span class="size-tooltip" id="tipShortForm" role="tooltip">Uses the largest preset to preserve more quality for short-form social uploads. Platform rules can still vary.</span></button></div>
+      </div>
+      <p class="size-description" id="sizeDescription">Best for compact clips shared in Discord.</p>
+      <p class="size-warning" id="sizeWarning" role="status" aria-live="polite" hidden></p>
+    </fieldset>
     <fieldset class="version-group" id="versionGroup"><legend>Video layout</legend><label><input type="radio" name="version" value="standard" checked><span class="layout-icon layout-icon--standard" aria-hidden="true"></span><span class="layout-copy">Standard<small>Text above the video</small></span></label><label><input type="radio" name="version" value="reel"><span class="layout-icon layout-icon--reel" aria-hidden="true"></span><span class="layout-copy">Reel<small>Text over the video</small></span></label></fieldset>
     <fieldset class="personalize" id="personalizeBox">
       <legend class="personalize__legend">Personalize your clip (optional)</legend>
@@ -299,7 +332,7 @@
     <div class="faq-list">
     <details><summary><h3>Are downloads free?</h3></summary><p>Yes. ClipTweet provides a complete generation flow free of charge. Display advertising may help fund operation; allowing ads is optional, and ad blockers do not prevent generating or downloading. No feature is unlocked by interacting with ads.</p></details>
     <details><summary><h3>Which posts work?</h3></summary><p>Public posts with a playable video or animated GIF. Private, protected or deleted posts cannot be downloaded. GIF timing is read from its normalized video track when X omits duration metadata.</p></details>
-    <details><summary><h3>What are the limits?</h3></summary><p>Videos must be no longer than 10 minutes; the generated MP4 must fit within 20 MB. Some devices or codecs are unsupported. Use an up-to-date browser with WebCodecs support.</p></details>
+    <details><summary><h3>What are the limits?</h3></summary><p>Videos must be no longer than 10 minutes and smaller than 1.2 GB. Choose a maximum output file size; it is a ceiling, not a target. Some devices or codecs are unsupported. Use an up-to-date browser with WebCodecs support.</p></details>
     <details><summary><h3>Does ClipTweet store my videos?</h3></summary><p>No. Your browser downloads media directly from X's video CDN and creates the output locally. Our resolver only retrieves post metadata.</p></details>
     <details><summary><h3>How does ClipTweet stay free?</h3></summary><p>ClipTweet may show independent display advertising around the tool. Allowing ads is optional and helps support maintenance; it is never required to generate or download a clip.</p></details>
     <details><summary><h3>Can I use an ad blocker?</h3></summary><p>Yes. Ad blockers and Brave Shields do not affect generation or downloads. You can dismiss the optional notice.</p></details>

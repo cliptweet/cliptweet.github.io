@@ -15,6 +15,9 @@ const profilePreviewName = document.getElementById('profilePreviewName');
 const personalizeBox = document.getElementById('personalizeBox');
 const brandingOptions = document.getElementById('brandingOptions');
 const withoutBranding = document.getElementById('withoutBranding');
+const sizeInputs = Array.from(document.querySelectorAll('input[name="maxFileSize"]'));
+const sizeDescription = document.getElementById('sizeDescription');
+const sizeWarning = document.getElementById('sizeWarning');
 const layoutInputs = Array.from(document.querySelectorAll('input[name="version"]'));
 let generating = false;
 let objectUrl;
@@ -165,6 +168,7 @@ function setBusy(value) {
   generateBtn.disabled = value;
   input.disabled = value;
   layoutInputs.forEach(radio => { radio.disabled = value; });
+  sizeInputs.forEach(radio => { radio.disabled = value; });
   withoutBranding.disabled = value;
 }
 
@@ -175,6 +179,7 @@ function updateLayout() {
   if (isReel) clearProfile();
 }
 layoutInputs.forEach(radio => radio.addEventListener('change', updateLayout));
+sizeInputs.forEach(radio => radio.addEventListener('change', () => { sizeDescription.textContent = radio.dataset.description; }));
 updateLayout();
 
 generateBtn.addEventListener('click', async () => {
@@ -207,7 +212,11 @@ generateBtn.addEventListener('click', async () => {
     }
     const { generateClip, normalizeTweetUrl } = await import('./clip.js');
     try { normalizeTweetUrl(url); } catch (error) { statusDiv.textContent = error.message; return; }
-    const result = await generateClip({ url, version, branding: !withoutBranding.checked, identity: version === 'standard' ? identity : null, signal: controller.signal, onProgress: message => { statusDiv.textContent = message; } });
+    const maxBytes = Number(sizeInputs.find(radio => radio.checked)?.value || 20971520);
+    sizeWarning.hidden = true;
+    sizeWarning.textContent = '';
+    sizeWarning.dataset.level = '';
+    const result = await generateClip({ url, version, branding: !withoutBranding.checked, identity: version === 'standard' ? identity : null, maxBytes, signal: controller.signal, onProgress: message => { statusDiv.textContent = message; }, onWarning: notice => { sizeWarning.textContent = [notice.message, notice.recommendation].filter(Boolean).join(' '); sizeWarning.dataset.level = notice.level; sizeWarning.hidden = false; } });
     statusDiv.textContent = 'Encoding your clip... 100%';
     await new Promise(requestAnimationFrame);
     if (objectUrl) URL.revokeObjectURL(objectUrl);

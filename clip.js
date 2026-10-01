@@ -7,9 +7,27 @@ import {
   UrlSource, ALL_FORMATS, Quality, canEncodeVideo,
 } from 'https://cdn.jsdelivr.net/npm/mediabunny@1.61.0/+esm';
 
-const MAX_BYTES = 20 * 1024 * 1024;   // hard download cap
+const MAX_INPUT_BYTES = 1.2 * 1024 * 1024 * 1024;
+const DEFAULT_MAX_OUTPUT_BYTES = 20 * 1024 * 1024;
 const HEADROOM = 0.90;                 // container / audio overhead margin
 const MAX_DURATION_SEC = 600;
+const OUTPUT_PRESETS = [
+  ['Discord', 20 * 1024 * 1024],
+  ['WhatsApp', 100 * 1024 * 1024],
+  ['X', 512 * 1024 * 1024],
+  ['TikTok / Instagram', 4 * 1024 * 1024 * 1024],
+];
+
+function compressionNotice(sourceSizeBytes, maxBytes) {
+  const ratio = sourceSizeBytes > 0 && maxBytes > 0 ? sourceSizeBytes / maxBytes : 0;
+  if (ratio <= 20) return null;
+  const recommended = OUTPUT_PRESETS.find(([, bytes]) => sourceSizeBytes / bytes < 20) || OUTPUT_PRESETS.at(-1);
+  return {
+    level: ratio > 100 ? 'strong' : 'warn',
+    message: `This source is about ${Math.round(ratio)}x larger than the selected maximum. Compression may require substantial bitrate or resolution reduction and significantly reduce visual quality.`,
+    recommendation: `Recommended alternative: ${recommended[0]} (${recommended[1] / 1024 / 1024 >= 1024 ? '4 GB' : `${recommended[1] / 1024 / 1024} MB`}).`,
+  };
+}
 
 // Banner colours match the previous server-rendered header.
 const STANDARD_SURFACE = '#15202B';
@@ -211,7 +229,7 @@ async function buildIdentityBlock(avatarUrl, label, fontPx, maxWidth) {
 
 // ── Main pipeline ────────────────────────────────────────────────────────────
 
-export async function generateClip({ url, identity, version = 'standard', branding = true, onProgress, signal }) {
+export async function generateClip({ url, identity, version = 'standard', branding = true, maxBytes = DEFAULT_MAX_OUTPUT_BYTES, onProgress, onWarning, signal }) {
   if (!['standard', 'reel'].includes(version)) throw new Error('Choose a supported video layout.');
   const isReel = version === 'reel';
   if (typeof VideoEncoder === 'undefined') {
@@ -239,6 +257,7 @@ export async function generateClip({ url, identity, version = 'standard', brandi
   }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || 'Could not read that post.');
+  if (Number(data.durationMs || 0) > MAX_DURATION_SEC * 1000) throw new Error('ClipTweet currently supports videos up to 10 minutes.');
   if (statusId && data.id && data.id !== statusId) {
     throw new Error('That link no longer matches the post. Copy the link again.');
   }
@@ -246,9 +265,13 @@ export async function generateClip({ url, identity, version = 'standard', brandi
   const profile = PROFILE;
   const variant = data.variants.at(-1);
   if (!variant) throw new Error('That post has no playable video.');
+  try {
+    const head = await fetch(variant.url, { method: 'HEAD', referrerPolicy: 'no-referrer', signal: AbortSignal.timeout(8000) });
+    const size = Number(head.headers.get('content-length') || 0);
+    if (size >= MAX_INPUT_BYTES) throw new Error('ClipTweet currently supports videos smaller than 1.2 GB.');
+  } catch (error) { if (error.message.includes('1.2 GB')) throw error; }
 
-  // Duration-aware bitrate budget with headroom, so the result cannot exceed
-  // Keep generated files within 20 MB.
+  // Duration-aware bitrate budget with headroom, so the selected ceiling is respected.
   onProgress?.('Downloading the video...', 0.06);
 
   // X's CDN answers 403 to any request that carries a Referer header, so the
@@ -269,10 +292,14 @@ export async function generateClip({ url, identity, version = 'standard', brandi
     }
     if (durationSec > MAX_DURATION_SEC) throw new Error('That video is longer than 10 minutes.');
     if (!durationSec) throw new Error('Could not determine the video duration.');
-    const totalKbps = (MAX_BYTES * 8 * HEADROOM) / durationSec / 1000;
+    const sourceSizeBytes = Number(data.sourceSizeBytes || data.fileSize || 0)
+      || (Number(variant.bitrate || 0) * durationSec / 8);
+    const notice = compressionNotice(sourceSizeBytes, maxBytes);
+    if (notice) onWarning?.(notice);
+    const totalKbps = (maxBytes * 8 * HEADROOM) / durationSec / 1000;
     const audioKbps = profile.audioKbps;
     const videoKbps = Math.floor(Math.min(totalKbps - audioKbps, profile.maxVideoKbps));
-    if (videoKbps < 60) throw new Error(`That video exceeds the ${MAX_BYTES / (1024 * 1024)} MB size limit. Try a shorter or lower-quality video.`);
+    if (videoKbps < 60) throw new Error('That video exceeds the selected file-size limit. Try a larger limit.');
 
     const srcW = await videoTrack.getDisplayWidth();
     const srcH = await videoTrack.getDisplayHeight();
@@ -433,7 +460,7 @@ export async function generateClip({ url, identity, version = 'standard', brandi
     // unencodable on this device) the conversion still "succeeds" and hands the
     // user an audio-only file. Require a video track in the output, and fall
     // back through the remaining codecs before giving up.
-    let output, conversion;
+    let output, conversion, selectedVideoConfig;
     for (const codec of codecOrder) {
       let encodable = false;
       try { encodable = await canEncodeVideo(codec, { width: outW, height: totalH }); }
@@ -441,45 +468,46 @@ export async function generateClip({ url, identity, version = 'standard', brandi
       if (!encodable) continue;
 
       const candidateOutput = new Output({ format: new Mp4OutputFormat(), target: new BufferTarget() });
+      const videoConfig = {
+        codec,
+        forceTranscode: true,
+        // No `width` option: process() already returns a frame at the final
+        // output size, so any automatic resize stage would rescale the banner.
+        quality: new Quality({ bitrate: Math.round(videoKbps * 1000) }),
+        process: (sample) => {
+          const viewport = card || { x: 0, y: isReel ? 0 : bannerH, width: outW, height: outH };
+          if (card) fctx.drawImage(card.decoration, 0, bannerH, outW, card.cardH);
+          fctx.save();
+          try {
+            if (card) fctx.clip(card.mask);
+            else {
+              fctx.beginPath();
+              fctx.rect(viewport.x, viewport.y, viewport.width, viewport.height);
+              fctx.clip();
+            }
+            // Uniform scale + centred excess: fills the viewport without
+            // stretching, including rounding differences and rotated samples.
+            const mediaAspect = sample.displayWidth / sample.displayHeight;
+            const viewportAspect = viewport.width / viewport.height;
+            if (Math.abs(mediaAspect - viewportAspect) < 1e-9) {
+              sample.draw(fctx, viewport.x, viewport.y, viewport.width, viewport.height);
+            } else {
+              const cover = Math.max(viewport.width / sample.displayWidth, viewport.height / sample.displayHeight);
+              const width = sample.displayWidth * cover, height = sample.displayHeight * cover;
+              sample.draw(fctx, viewport.x + (viewport.width - width) / 2, viewport.y + (viewport.height - height) / 2, width, height);
+            }
+          } finally { fctx.restore(); }
+          // Graphics are composited at final resolution after media fitting.
+          if (!isReel && bannerH) fctx.drawImage(banner, 0, 0, outW, bannerH);
+          if (isReel && lines.length) fctx.drawImage(banner, 0, reelTop, outW, reelLayerH);
+          return frame;
+        },
+        processedWidth: outW,
+        processedHeight: totalH,
+      };
       const attempt = await Conversion.init({
         input, output: candidateOutput,
-        video: {
-          codec,
-          forceTranscode: true,
-          // No `width` option: process() already returns a frame at the final
-          // output size, so any automatic resize stage would rescale the banner.
-          quality: new Quality({ bitrate: Math.round(videoKbps * 1000) }),
-          process: (sample) => {
-            const viewport = card || { x: 0, y: isReel ? 0 : bannerH, width: outW, height: outH };
-            if (card) fctx.drawImage(card.decoration, 0, bannerH, outW, card.cardH);
-            fctx.save();
-            try {
-              if (card) fctx.clip(card.mask);
-              else {
-                fctx.beginPath();
-                fctx.rect(viewport.x, viewport.y, viewport.width, viewport.height);
-                fctx.clip();
-              }
-              // Uniform scale + centred excess: fills the viewport without
-              // stretching, including rounding differences and rotated samples.
-              const mediaAspect = sample.displayWidth / sample.displayHeight;
-              const viewportAspect = viewport.width / viewport.height;
-              if (Math.abs(mediaAspect - viewportAspect) < 1e-9) {
-                sample.draw(fctx, viewport.x, viewport.y, viewport.width, viewport.height);
-              } else {
-                const cover = Math.max(viewport.width / sample.displayWidth, viewport.height / sample.displayHeight);
-                const width = sample.displayWidth * cover, height = sample.displayHeight * cover;
-                sample.draw(fctx, viewport.x + (viewport.width - width) / 2, viewport.y + (viewport.height - height) / 2, width, height);
-              }
-            } finally { fctx.restore(); }
-            // Graphics are composited at final resolution after media fitting.
-            if (!isReel && bannerH) fctx.drawImage(banner, 0, 0, outW, bannerH);
-            if (isReel && lines.length) fctx.drawImage(banner, 0, reelTop, outW, reelLayerH);
-            return frame;
-          },
-          processedWidth: outW,
-          processedHeight: totalH,
-        },
+        video: videoConfig,
         // No audio options: the X source is already AAC, so Mediabunny copies
         // the track untouched. Forcing a transcode here silently dropped audio
         // on devices without an encoder for the source's channel/rate pairing.
@@ -491,6 +519,7 @@ export async function generateClip({ url, identity, version = 'standard', brandi
       if (attempt.isValid && attempt.utilizedTracks.some((t) => t.type === 'video')) {
         output = candidateOutput;
         conversion = attempt;
+        selectedVideoConfig = videoConfig;
         break;
       }
       await attempt.cancel().catch(() => {});
@@ -500,17 +529,23 @@ export async function generateClip({ url, identity, version = 'standard', brandi
       throw new Error('This device could not encode the video track. Try Chrome, Edge or Safari 16.4+ on a computer.');
     }
 
-    conversion.onProgress = (p) => onProgress?.(`Encoding your clip... ${Math.round(p * 100)}%`, 0.15 + p * 0.8);
-    await conversion.execute(signal ? { pauseSignal: signal } : undefined);
-
-    const buffer = output.target.buffer;
-    const blob = new Blob([buffer], { type: 'video/mp4' });
-
-    // Safety net: never expose an oversized result.
-    if (blob.size > MAX_BYTES) {
-      throw new Error(`That video exceeds the ${MAX_BYTES / (1024 * 1024)} MB size limit. Try a shorter or lower-quality video.`);
+    let bitrateBps = Math.round(videoKbps * 1000);
+    let bestBlob = null;
+    for (let attemptIndex = 0; attemptIndex < 3; attemptIndex += 1) {
+      if (attemptIndex > 0) {
+        bitrateBps = Math.max(60_000, Math.floor(bitrateBps * 0.85));
+        selectedVideoConfig.quality = new Quality({ bitrate: bitrateBps });
+        output = new Output({ format: new Mp4OutputFormat(), target: new BufferTarget() });
+        conversion = await Conversion.init({ input, output, video: selectedVideoConfig });
+      }
+      conversion.onProgress = (p) => onProgress?.(`Encoding your clip... ${Math.round(p * 100)}%`, 0.15 + p * 0.8);
+      await conversion.execute(signal ? { pauseSignal: signal } : undefined);
+      const blob = new Blob([output.target.buffer], { type: 'video/mp4' });
+      if (!bestBlob || blob.size < bestBlob.size) bestBlob = blob;
+      if (blob.size < maxBytes) return { blob, text: bannerText, lines, author: data.author, handle: data.handle };
     }
-    return { blob, text: bannerText, lines, author: data.author, handle: data.handle };
+    onWarning?.({ level: 'strong', message: 'The generated clip is still above the selected maximum after three compression attempts. Quality was preserved as much as possible; choose a larger limit for a smaller file.', recommendation: '' });
+    return { blob: bestBlob, text: bannerText, lines, author: data.author, handle: data.handle };
   } finally {
     try { input.dispose(); } catch { /* already gone */ }
   }
