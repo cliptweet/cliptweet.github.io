@@ -537,6 +537,7 @@ export async function generateClip({ url, identity, version = 'standard', brandi
 
     let bitrateBps = Math.round(videoKbps * 1000);
     let bestBlob = null;
+    let lastEncodingProgress = 0;
     for (let attemptIndex = 0; attemptIndex < 3; attemptIndex += 1) {
       if (attemptIndex > 0) {
         bitrateBps = Math.max(60_000, Math.floor(bitrateBps * 0.85));
@@ -544,7 +545,13 @@ export async function generateClip({ url, identity, version = 'standard', brandi
         output = new Output({ format: new Mp4OutputFormat(), target: new BufferTarget() });
         conversion = await Conversion.init({ input, output, video: selectedVideoConfig });
       }
-      conversion.onProgress = (p) => onProgress?.(`Encoding your clip... ${Math.min(99, Math.round(p * 100))}%`, 0.15 + p * 0.8);
+      const slotStart = attemptIndex === 0 ? 0 : 85 + (attemptIndex - 1) * 7;
+      const slotEnd = attemptIndex === 0 ? 85 : attemptIndex === 1 ? 92 : 99;
+      conversion.onProgress = (p) => {
+        const percent = Math.min(99, Math.max(lastEncodingProgress, Math.round(slotStart + (slotEnd - slotStart) * p)));
+        lastEncodingProgress = percent;
+        onProgress?.(`Encoding your clip... ${percent}%`, percent / 100);
+      };
       timing(`encode started (attempt ${attemptIndex + 1})`);
       await conversion.execute(signal ? { pauseSignal: signal } : undefined);
       timing(`encode finished (attempt ${attemptIndex + 1})`);

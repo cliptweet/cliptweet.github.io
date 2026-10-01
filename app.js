@@ -223,7 +223,7 @@ generateBtn.addEventListener('click', async () => {
     objectUrl = URL.createObjectURL(result.blob);
     previewVideo.src = objectUrl;
     previewContainer.classList.add('active');
-    statusDiv.textContent = 'Clip generated successfully.';
+    statusDiv.textContent = 'Ready to download.';
     downloadBtn.onclick = () => {
       const link = document.createElement('a');
       link.href = objectUrl;
