@@ -89,14 +89,15 @@
     .size-warning { margin: 10px 0 0; padding: 10px 12px; border: 1px solid #9a741f; border-radius: 8px; color: #f1d27a; font-size: 12px; line-height: 1.5; }
     .size-warning[data-level="strong"] { border-color: var(--error); color: #ffb4ad; }
     .size-warning[hidden] { display: none; }
-    .generation-hint { max-width: 330px; margin: 30px 0 0; padding: 14px 16px; border: 1px solid rgb(226 105 120 / 42%); border-radius: 10px; background: rgb(86 28 40 / 28%); color: #d9b7bc; font-size: 12px; line-height: 1.5; }
+    .generation-hint { max-width: 330px; margin: 30px 0 0; padding: 15px 16px; border: 1px solid rgb(226 105 120 / 42%); border-radius: 10px; background: rgb(86 28 40 / 28%); color: #d9b7bc; font-size: clamp(14px, 1vw, 15px); line-height: 1.6; }
     .generation-hint[hidden] { display: none; }
-    .generation-hint summary { display: inline-flex; align-items: center; gap: 7px; cursor: pointer; list-style: none; }
+    .generation-hint summary { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; list-style: none; color: #f0d9dc; font-family: inherit; font-size: clamp(16px, 1.25vw, 18px); font-weight: 750; letter-spacing: -0.2px; line-height: 1.35; }
     .generation-hint summary::-webkit-details-marker { display: none; }
     .generation-hint summary:hover { color: #f0d9dc; }
     .generation-hint summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 4px; }
     .generation-hint__icon { display: inline-grid; place-items: center; width: 16px; height: 16px; border: 1px solid currentColor; border-radius: 50%; font-size: 11px; font-weight: 700; line-height: 1; }
-    .generation-hint p { max-width: 52ch; margin: 9px 0 0 23px; color: #d9b7bc; }
+    .generation-hint p { max-width: 52ch; margin: 10px 0 0 24px; color: #e0c7ca; font-weight: 500; }
+    .generation-hint__action { color: #f0d9dc !important; font-size: inherit; font-weight: 650; }
     .version-group { display: flex; gap: 12px; border: 0; padding: 0; margin: 0 0 24px; min-width: 0; }
     .version-group legend { padding: 0; margin-bottom: 10px; }
     .version-group label { position: relative; display: flex; flex: 1; align-items: center; gap: 12px; min-width: 0; min-height: 90px; margin: 0; padding: 14px 30px 14px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--field); cursor: pointer; }
@@ -268,8 +269,9 @@
     <p class="tagline">Keep the text. Keep the video. Create a ready-to-share MP4 in your browser.</p>
     <p class="intro-note">Free to use. No account needed.</p>
     <details id="generationHint" class="generation-hint" hidden>
-      <summary><span class="generation-hint__icon" aria-hidden="true">i</span>Generation taking longer than expected?</summary>
-      <p>Generation speed can vary by browser. ClipTweet processes videos locally through browser video APIs; in our testing, Chrome has generally been faster while Brave may take longer on some devices because browsers can use different hardware-accelerated or software encoding paths. If generation is unusually slow, trying the latest Chrome may help.</p>
+      <summary><span class="generation-hint__icon" aria-hidden="true">i</span>Taking longer than expected?</summary>
+      <p>ClipTweet processes videos locally on your device. If generation is unusually slow, your browser may not be using hardware-accelerated video encoding, which can make processing significantly slower.</p>
+      <p class="generation-hint__action">Make sure hardware or graphics acceleration is enabled in your browser settings, then restart your browser.</p>
     </details>
   </div>
   <div class="card">
