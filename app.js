@@ -198,6 +198,10 @@ generateBtn.addEventListener('click', async () => {
   resetGenerationHint();
   generationHintTimer = setTimeout(() => { generationHint.hidden = false; }, 5000);
   previewContainer.classList.remove('active');
+  if (objectUrl) URL.revokeObjectURL(objectUrl);
+  objectUrl = undefined;
+  previewVideo.removeAttribute('src');
+  downloadBtn.onclick = null;
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 600_000);
   const generationStartedAt = performance.now();
@@ -224,17 +228,23 @@ generateBtn.addEventListener('click', async () => {
         setProfileStatus(why, 'error');
       }
     }
-    const { generateClip, normalizeTweetUrl } = await import('./clip.js');
+    const { generateClip, normalizeTweetUrl, exposeOutputAfterFrame } = await import('./clip.js');
     try { normalizeTweetUrl(url); } catch (error) { statusDiv.textContent = error.message; return; }
     const maxBytes = Number(sizeInputs.find(radio => radio.checked)?.value || 20971520);
     sizeWarning.hidden = true;
     sizeWarning.textContent = '';
     sizeWarning.dataset.level = '';
     const result = await generateClip({ url, version, branding: !withoutBranding.checked, identity: version === 'standard' ? identity : null, maxBytes, signal: controller.signal, generationStartedAt, profileResolutionMs, onProgress: message => { statusDiv.textContent = message; }, onWarning: notice => { sizeWarning.textContent = [notice.message, notice.recommendation].filter(Boolean).join(' '); sizeWarning.dataset.level = notice.level; sizeWarning.hidden = false; } });
-    statusDiv.textContent = 'Encoding your clip... 100%';
-    await new Promise(requestAnimationFrame);
-    if (objectUrl) URL.revokeObjectURL(objectUrl);
-    objectUrl = URL.createObjectURL(result.blob);
+    objectUrl = await exposeOutputAfterFrame({
+      blob: result.blob,
+      maxBytes,
+      signal: controller.signal,
+      nextFrame: () => {
+        statusDiv.textContent = 'Encoding your clip... 100%';
+        return new Promise(requestAnimationFrame);
+      },
+      expose: blob => URL.createObjectURL(blob),
+    });
     previewVideo.src = objectUrl;
     previewContainer.classList.add('active');
     statusDiv.textContent = '';

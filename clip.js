@@ -6,16 +6,22 @@ import {
   Input, Output, Conversion, Mp4OutputFormat, BufferTarget,
   UrlSource, ALL_FORMATS, Quality, canEncodeVideo,
 } from 'https://cdn.jsdelivr.net/npm/mediabunny@1.61.0/+esm';
+import {
+  MAX_ENCODING_ATTEMPTS, MIN_VIDEO_BITRATE_BPS, OUTPUT_SIZE_LIMITS,
+  assertOutputWithinLimit, encodeWithinSizeLimit, executeWithCancellation,
+  exposeOutput, initialVideoBitrate, targetBytesFor, throwIfAborted,
+} from './size-budget.mjs';
+
+export { assertOutputWithinLimit, exposeOutput, exposeOutputAfterFrame, throwIfAborted } from './size-budget.mjs';
 
 const MAX_INPUT_BYTES = 1.2 * 1024 * 1024 * 1024;
-const DEFAULT_MAX_OUTPUT_BYTES = 20 * 1024 * 1024;
-const HEADROOM = 0.90;                 // container / audio overhead margin
+const DEFAULT_MAX_OUTPUT_BYTES = OUTPUT_SIZE_LIMITS[0];
 const MAX_DURATION_SEC = 600;
 const OUTPUT_PRESETS = [
-  ['Discord', 20 * 1024 * 1024],
-  ['WhatsApp', 100 * 1024 * 1024],
-  ['X', 512 * 1024 * 1024],
-  ['TikTok / Instagram', 4 * 1024 * 1024 * 1024],
+  ['Discord', OUTPUT_SIZE_LIMITS[0]],
+  ['WhatsApp', OUTPUT_SIZE_LIMITS[1]],
+  ['X', OUTPUT_SIZE_LIMITS[2]],
+  ['TikTok / Instagram', OUTPUT_SIZE_LIMITS[3]],
 ];
 
 function compressionNotice(sourceSizeBytes, maxBytes) {
@@ -27,6 +33,19 @@ function compressionNotice(sourceSizeBytes, maxBytes) {
     message: `This source is about ${Math.round(ratio)}x larger than the selected maximum. Compression may require substantial bitrate or resolution reduction and significantly reduce visual quality.`,
     recommendation: `Recommended alternative: ${recommended[0]} (${recommended[1] / 1024 / 1024 >= 1024 ? '4 GB' : `${recommended[1] / 1024 / 1024} MB`}).`,
   };
+}
+
+async function estimateCopiedAudioBitrate(input, fallbackBitrateBps) {
+  const tracks = await input.getAudioTracks();
+  let total = 0;
+  for (const track of tracks) {
+    let bitrate = await track.getAverageBitrate().catch(() => null);
+    if (!(bitrate > 0)) {
+      bitrate = await track.computePacketStats(50).then(stats => stats.averageBitrate).catch(() => null);
+    }
+    total += bitrate > 0 ? bitrate : fallbackBitrateBps;
+  }
+  return total;
 }
 
 // Banner colours match the previous server-rendered header.
@@ -247,6 +266,9 @@ export async function generateClip({ url, identity, version = 'standard', brandi
   let selectedCodec = null;
   let sourceFps = null;
   let sourceDurationSec = 0;
+  let sourceWidth = 0;
+  let sourceHeight = 0;
+  let estimatedAudioBitrateBps = 0;
   let outputWidth = 0;
   let outputHeight = 0;
   let outputPixelsPerFrame = 0;
@@ -258,8 +280,8 @@ export async function generateClip({ url, identity, version = 'standard', brandi
     try {
       console.info('[ClipTweet generation diagnostics]', {
         layout: isReel ? 'Reel' : 'Standard',
-        sourceWidth: srcW,
-        sourceHeight: srcH,
+        sourceWidth,
+        sourceHeight,
         outputWidth,
         outputHeight,
         outputPixelsPerFrame,
@@ -268,6 +290,8 @@ export async function generateClip({ url, identity, version = 'standard', brandi
         selectedCodec,
         selectedBitrate: passBitrates[0] || null,
         maxBytes,
+        targetBytes: targetBytesFor(maxBytes),
+        estimatedAudioBitrateBps,
         profilePersonalization: Boolean(identity && !isReel),
         profileResolutionMs: Math.round(profileResolutionMs || 0),
         layoutSetupMs: Math.round(layoutSetupMs),
@@ -355,13 +379,19 @@ export async function generateClip({ url, identity, version = 'standard', brandi
       || (Number(variant.bitrate || 0) * durationSec / 8);
     const notice = compressionNotice(sourceSizeBytes, maxBytes);
     if (notice) onWarning?.(notice);
-    const totalKbps = (maxBytes * 8 * HEADROOM) / durationSec / 1000;
-    const audioKbps = profile.audioKbps;
-    const videoKbps = Math.floor(Math.min(totalKbps - audioKbps, profile.maxVideoKbps));
-    if (videoKbps < 60) throw new Error('That video exceeds the selected file-size limit. Try a larger limit.');
+    estimatedAudioBitrateBps = await estimateCopiedAudioBitrate(input, profile.audioKbps * 1000);
+    const initialBitrateBps = initialVideoBitrate({
+      maxBytes,
+      durationSeconds: durationSec,
+      audioBitrateBps: estimatedAudioBitrateBps,
+      maxVideoBitrateBps: profile.maxVideoKbps * 1000,
+    });
+    if (initialBitrateBps < MIN_VIDEO_BITRATE_BPS) throw new Error('That video exceeds the selected file-size limit. Try a larger limit.');
 
     const srcW = await videoTrack.getDisplayWidth();
     const srcH = await videoTrack.getDisplayHeight();
+    sourceWidth = srcW;
+    sourceHeight = srcH;
     // Even width/height keeps H.264 encoders happy.
     const outW = Math.max(2, isReel ? srcW : Math.min(profile.width, srcW)) & ~1;
     const outH = Math.max(2, Math.round(outW * (srcH / srcW)) & ~1);
@@ -538,6 +568,7 @@ export async function generateClip({ url, identity, version = 'standard', brandi
       let encodable = false;
       try { encodable = await canEncodeVideo(codec, { width: outW, height: totalH }); }
       catch { encodable = false; }
+      throwIfAborted(signal);
       codecChecks.push({ codec, supported: encodable });
       if (!encodable) continue;
 
@@ -546,7 +577,7 @@ export async function generateClip({ url, identity, version = 'standard', brandi
         forceTranscode: true,
         // No `width` option: process() already returns a frame at the final
         // output size, so any automatic resize stage would rescale the banner.
-        quality: new Quality({ bitrate: Math.round(videoKbps * 1000) }),
+        quality: new Quality({ bitrate: initialBitrateBps }),
         process: (sample) => {
           const compositionStartedAt = diagnosticNow();
           try {
@@ -586,6 +617,10 @@ export async function generateClip({ url, identity, version = 'standard', brandi
         // the track untouched. Forcing a transcode here silently dropped audio
         // on devices without an encoder for the source's channel/rate pairing.
       });
+      if (signal?.aborted) {
+        await attempt.cancel().catch(() => {});
+        throwIfAborted(signal);
+      }
       timing(`encoder initialized (${codec})`);
 
       const discarded = attempt.discardedTracks.map((d) => `${d.track.type}:${d.reason}`);
@@ -605,46 +640,88 @@ export async function generateClip({ url, identity, version = 'standard', brandi
       throw new Error('This device could not encode the video track. Try Chrome, Edge or Safari 16.4+ on a computer.');
     }
 
-    let bitrateBps = Math.round(videoKbps * 1000);
-    let bestBlob = null;
     let lastEncodingProgress = 0;
-    for (let attemptIndex = 0; attemptIndex < 3; attemptIndex += 1) {
-      if (attemptIndex > 0) {
-        bitrateBps = Math.max(60_000, Math.floor(bitrateBps * 0.85));
-        selectedVideoConfig.quality = new Quality({ bitrate: bitrateBps });
-        output = new Output({ format: new Mp4OutputFormat(), target: new BufferTarget() });
-        conversion = await Conversion.init({ input, output, video: selectedVideoConfig });
+    let preparedOutput = output;
+    let preparedConversion = conversion;
+    output = null;
+    conversion = null;
+    let activeConversion = preparedConversion;
+    try {
+      const result = await encodeWithinSizeLimit({
+        maxBytes,
+        initialBitrateBps,
+        signal,
+        encodeAttempt: async ({ attempt, bitrateBps }) => {
+          let attemptOutput;
+          let attemptConversion;
+          if (attempt === 1) {
+            attemptOutput = preparedOutput;
+            attemptConversion = preparedConversion;
+            preparedOutput = null;
+            preparedConversion = null;
+          } else {
+            selectedVideoConfig.quality = new Quality({ bitrate: bitrateBps });
+            attemptOutput = new Output({ format: new Mp4OutputFormat(), target: new BufferTarget() });
+            attemptConversion = await Conversion.init({ input, output: attemptOutput, video: selectedVideoConfig });
+            if (signal?.aborted) {
+              await attemptConversion.cancel().catch(() => {});
+              throwIfAborted(signal);
+            }
+            if (!attemptConversion.isValid || !attemptConversion.utilizedTracks.some(track => track.type === 'video')) {
+              await attemptConversion.cancel().catch(() => {});
+              throw new Error('This device could not encode the video track at the required bitrate.');
+            }
+          }
+          activeConversion = attemptConversion;
+
+          try {
+            const attemptIndex = attempt - 1;
+            const retrySlot = 14 / (MAX_ENCODING_ATTEMPTS - 1);
+            const slotStart = attemptIndex === 0 ? 0 : 85 + (attemptIndex - 1) * retrySlot;
+            const slotEnd = attemptIndex === 0 ? 85 : 85 + attemptIndex * retrySlot;
+            attemptConversion.onProgress = (p) => {
+              const percent = Math.min(99, Math.max(lastEncodingProgress, Math.round(slotStart + (slotEnd - slotStart) * p)));
+              lastEncodingProgress = percent;
+              onProgress?.(`Encoding your clip... ${percent}%`, percent / 100);
+            };
+            timing(`encode started (attempt ${attempt})`);
+            const passStartedAt = diagnosticNow();
+            await executeWithCancellation(attemptConversion, signal);
+            const passDurationMs = diagnosticNow() - passStartedAt;
+            encodeMs += passDurationMs;
+            timing(`encode finished (attempt ${attempt})`);
+            if (!attemptOutput.target.buffer) throw new Error('Generation did not produce a complete output file.');
+            const finalizeStartedAt = diagnosticNow();
+            const blob = new Blob([attemptOutput.target.buffer], { type: 'video/mp4' });
+            finalizationMs += diagnosticNow() - finalizeStartedAt;
+            timing(`output blob ready (${Math.round(blob.size / 1024 / 1024)} MB)`);
+            passDurationsMs.push(passDurationMs);
+            return blob;
+          } finally {
+            if (activeConversion === attemptConversion) activeConversion = null;
+            attemptOutput = null;
+            attemptConversion = null;
+          }
+        },
+        onAttempt: ({ bitrateBps, outputBytes, withinLimit }) => {
+          passBitrates.push(bitrateBps);
+          passBlobBytes.push(outputBytes);
+          passExceededMax.push(!withinLimit);
+        },
+      });
+      assertOutputWithinLimit(result.blob, maxBytes);
+      emitDiagnostics(result.blob.size);
+      return { blob: result.blob, text: bannerText, lines, author: data.author, handle: data.handle };
+    } catch (error) {
+      await activeConversion?.cancel().catch(() => {});
+      preparedOutput = null;
+      preparedConversion = null;
+      emitDiagnostics(null);
+      if (error.code === 'OUTPUT_SIZE_LIMIT') {
+        onWarning?.({ level: 'strong', message: `The generated clip could not fit the selected maximum after ${passBitrates.length} compression attempts.`, recommendation: 'Choose a larger limit.' });
       }
-      const slotStart = attemptIndex === 0 ? 0 : 85 + (attemptIndex - 1) * 7;
-      const slotEnd = attemptIndex === 0 ? 85 : attemptIndex === 1 ? 92 : 99;
-      conversion.onProgress = (p) => {
-        const percent = Math.min(99, Math.max(lastEncodingProgress, Math.round(slotStart + (slotEnd - slotStart) * p)));
-        lastEncodingProgress = percent;
-        onProgress?.(`Encoding your clip... ${percent}%`, percent / 100);
-      };
-      timing(`encode started (attempt ${attemptIndex + 1})`);
-      const passStartedAt = diagnosticNow();
-      await conversion.execute(signal ? { pauseSignal: signal } : undefined);
-      const passDurationMs = diagnosticNow() - passStartedAt;
-      encodeMs += passDurationMs;
-      timing(`encode finished (attempt ${attemptIndex + 1})`);
-      const finalizeStartedAt = diagnosticNow();
-      const blob = new Blob([output.target.buffer], { type: 'video/mp4' });
-      finalizationMs += diagnosticNow() - finalizeStartedAt;
-      timing(`output blob ready (${Math.round(blob.size / 1024 / 1024)} MB)`);
-      passDurationsMs.push(passDurationMs);
-      passBitrates.push(bitrateBps);
-      passBlobBytes.push(blob.size);
-      passExceededMax.push(blob.size >= maxBytes);
-      if (!bestBlob || blob.size < bestBlob.size) bestBlob = blob;
-      if (blob.size < maxBytes) {
-        emitDiagnostics(blob.size);
-        return { blob, text: bannerText, lines, author: data.author, handle: data.handle };
-      }
+      throw error;
     }
-    emitDiagnostics(bestBlob?.size || null);
-    onWarning?.({ level: 'strong', message: 'The generated clip is still above the selected maximum after three compression attempts. Quality was preserved as much as possible; choose a larger limit for a smaller file.', recommendation: '' });
-    return { blob: bestBlob, text: bannerText, lines, author: data.author, handle: data.handle };
   } finally {
     try { input.dispose(); } catch { /* already gone */ }
   }
