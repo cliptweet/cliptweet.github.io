@@ -172,6 +172,20 @@
     .contact-block h3 { margin: 0 0 8px; font-size: 16px; font-weight: 600; }
     .contact-block p { margin-bottom: 0; }
     .site-info h2[id], .site-info h3[id] { scroll-margin-top: 24px; }
+    .about-block, .how-block { position: relative; }
+    .navigation-arrival::before { content: ""; position: absolute; inset: -12px; border: 1px solid rgb(96 185 255 / 40%); border-radius: 12px; background: rgb(96 185 255 / 5%); pointer-events: none; opacity: 0; animation: navigation-arrival 1600ms ease-in-out; }
+    .contact-dialog { width: min(420px, calc(100% - 36px)); max-height: calc(100dvh - 48px); padding: 24px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); color: var(--text); overflow: auto; overscroll-behavior: contain; }
+    .contact-dialog::backdrop { background: rgb(6 15 24 / 65%); }
+    body:has(.contact-dialog[open]) { overflow: hidden; }
+    .contact-dialog__heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+    .contact-dialog h2 { margin: 0; font-size: 21px; letter-spacing: -0.5px; }
+    .contact-dialog p { margin: 16px 0; color: var(--muted); font-size: 14px; }
+    .contact-dialog .contact-email { color: var(--text); font-size: 16px; overflow-wrap: anywhere; user-select: text; }
+    .contact-dialog__actions { display: flex; flex-wrap: wrap; gap: 12px; }
+    .contact-dialog button, .contact-dialog__actions a { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 8px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--field); color: var(--text); font-size: 14px; text-decoration: none; cursor: pointer; }
+    .contact-dialog button:hover, .contact-dialog__actions a:hover { border-color: var(--accent); color: var(--accent); }
+    .contact-dialog #copyEmail { min-width: 110px; }
+    .contact-dialog #copyStatus { min-height: 22px; margin-bottom: 0; font-size: 12px; }
     .faq-section { display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.4fr); gap: 64px; padding: 52px 0; border-top: 1px solid var(--line); }
     .faq-list { min-width: 0; }
     .faq-list details { border-bottom: 1px solid var(--line); }
@@ -191,11 +205,14 @@
     .site-footer p { margin: 0; }
     .site-footer nav { flex-wrap: wrap; gap: 4px 20px; margin-left: auto; }
     @media (prefers-reduced-motion: no-preference) {
+      html { scroll-behavior: smooth; }
       a, button, input, .version-group label, .size-option, .size-tooltip, summary { transition: color 140ms ease, background-color 140ms ease, border-color 140ms ease, opacity 140ms ease, transform 140ms ease; }
       #generateBtn:disabled::before { animation: processing 800ms linear infinite; }
       .preview-container.active { animation: result-in 180ms ease-out; }
       .generation-hint:not([hidden]) { animation: generation-hint-in 180ms ease-out; }
     }
+    @media (prefers-reduced-motion: reduce) { .navigation-arrival::before { animation: none; } }
+    @keyframes navigation-arrival { 0%, 100% { opacity: 0; } 20%, 55% { opacity: 1; } }
     @keyframes processing { to { transform: rotate(360deg); } }
     @keyframes result-in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
     @keyframes generation-hint-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
@@ -342,7 +359,7 @@
     <p>Standard places text above the video and offers optional personalization and ClipTweet branding. Reel places text over the video. The aim is a simple flow: paste a link, choose a layout, create a clip.</p>
     <section class="contact-block" aria-labelledby="contact">
     <h3 id="contact">Contact ClipTweet</h3>
-    <p>For bug reports, questions or suggestions, <a href="https://github.com/cliptweet/cliptweet.github.io/issues">contact the project on GitHub</a>. Posting requires a GitHub account. Issues are public; leave out private information.</p>
+    <p>Questions, feedback or a bug to report? Email <span class="contact-email">kendestrozado@gmail.com</span>. <a href="#contact">Open contact options</a> to copy the address or send an email.</p>
     </section>
     </section>
     <section class="how-block" aria-labelledby="how-it-works">
@@ -378,9 +395,17 @@
   </section>
   </main>
   <footer class="site-footer"><span translate="no">ClipTweet</span><p>ClipTweet is not affiliated with X / Twitter.</p><nav aria-label="Footer navigation"><a href="#about">About</a><a href="#how-it-works">How it works</a><a href="#contact">Contact</a><a href="#faq">FAQ</a><a href="#terms">Terms</a><a href="#privacy">Privacy</a></nav></footer>
+  <dialog id="contactDialog" class="contact-dialog" aria-labelledby="contactDialogTitle" aria-describedby="contactDialogDescription">
+    <div class="contact-dialog__heading"><h2 id="contactDialogTitle">Contact ClipTweet</h2><button id="closeContact" type="button" aria-label="Close contact dialog">Close</button></div>
+    <p id="contactDialogDescription">Questions, feedback or a bug to report? Get in touch by email.</p>
+    <p class="contact-email">kendestrozado@gmail.com</p>
+    <div class="contact-dialog__actions"><button id="copyEmail" type="button">Copy email</button><a href="mailto:kendestrozado@gmail.com?subject=ClipTweet">Send email</a></div>
+    <p id="copyStatus" role="status" aria-live="polite"></p>
+  </dialog>
   </div>
   <script src="/config.js"></script>
   <script src="/app.js"></script>
+  <script src="/navigation.js"></script>
 
 </body>
 </html>
