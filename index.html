@@ -6,12 +6,12 @@
   <meta name="referrer" content="no-referrer">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#101820">
-  <title>Twitter / X Video Downloader with Post Text — ClipTweet</title>
-  <meta name="description" content="Download X and Twitter videos as MP4 clips with the post text included. Free, no signup.">
+  <title>ClipTweet | Turn X Posts into MP4 Clips</title>
+  <meta name="description" content="Turn supported X posts with video or GIFs into MP4 clips with their text. Choose Standard or Reel and create the final video on your device. Free, no signup.">
   <link rel="canonical" href="https://cliptweet.github.io/">
   <meta property="og:type" content="website">
-  <meta property="og:title" content="ClipTweet — Twitter / X Video Downloader">
-  <meta property="og:description" content="Create an MP4 clip with the post text and video combined. Free, no signup, processed in your browser.">
+  <meta property="og:title" content="ClipTweet | Turn X Posts into MP4 Clips">
+  <meta property="og:description" content="Keep the post's context in a Standard or Reel MP4 clip, created directly in your browser. Free, no signup.">
   <meta property="og:url" content="https://cliptweet.github.io/">
   <meta property="og:site_name" content="ClipTweet">
   <meta name="twitter:card" content="summary">
@@ -168,6 +168,10 @@
     .how-block li { display: flex; align-items: baseline; gap: 14px; counter-increment: clip-step; font-size: 14px; margin-bottom: 14px; }
     .how-block li::before { content: counter(clip-step); display: grid; place-items: center; flex: none; width: 26px; height: 26px; border: 1px solid var(--line); border-radius: 7px; color: var(--accent); font-size: 12px; font-weight: 650; }
     .how-block > p { color: var(--text); font-size: 12px; }
+    .contact-block { margin-top: 24px; }
+    .contact-block h3 { margin: 0 0 8px; font-size: 16px; font-weight: 600; }
+    .contact-block p { margin-bottom: 0; }
+    .site-info h2[id], .site-info h3[id] { scroll-margin-top: 24px; }
     .faq-section { display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.4fr); gap: 64px; padding: 52px 0; border-top: 1px solid var(--line); }
     .faq-list { min-width: 0; }
     .faq-list details { border-bottom: 1px solid var(--line); }
@@ -182,10 +186,10 @@
     .legal-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 64px; padding: 48px 0 24px; border-top: 1px solid var(--line); }
     .legal-grid h2 { font-size: 17px; letter-spacing: -0.2px; }
     .legal-grid p { font-size: 12px; overflow-wrap: anywhere; }
-    .site-footer { display: flex; align-items: center; gap: 24px; padding: 24px 0 32px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+    .site-footer { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 24px; padding: 24px 0 32px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
     .site-footer > span { color: var(--text); font-size: 16px; font-weight: 700; letter-spacing: -0.4px; }
     .site-footer p { margin: 0; }
-    .site-footer nav { margin-left: auto; }
+    .site-footer nav { flex-wrap: wrap; gap: 4px 20px; margin-left: auto; }
     @media (prefers-reduced-motion: no-preference) {
       a, button, input, .version-group label, .size-option, .size-tooltip, summary { transition: color 140ms ease, background-color 140ms ease, border-color 140ms ease, opacity 140ms ease, transform 140ms ease; }
       #generateBtn:disabled::before { animation: processing 800ms linear infinite; }
@@ -244,7 +248,7 @@
       .legal-grid p { font-size: 12px; }
       .site-footer { display: grid; grid-template-columns: 1fr auto; gap: 8px 18px; padding-bottom: max(24px, env(safe-area-inset-bottom)); }
       .site-footer p { grid-column: 1 / -1; grid-row: 2; }
-      .site-footer nav { gap: 18px; }
+      .site-footer nav { grid-column: 1 / -1; margin-left: 0; gap: 4px 18px; }
     }
   </style>
 </head>
@@ -259,13 +263,13 @@
   <a class="skip-link" href="#main">Skip to the tool</a>
   <header class="site-header">
     <a class="wordmark" href="#main" aria-label="ClipTweet home" translate="no"><span class="brand-mark" aria-hidden="true">C</span>ClipTweet</a>
-    <nav aria-label="Main navigation"><a href="#how-it-works">How it works</a><a href="#faq">FAQ</a><a href="#terms">Terms &amp; Privacy</a></nav>
+    <nav aria-label="Main navigation"><a href="#how-it-works">How it works</a><a href="#about">About</a><a href="#contact">Contact</a></nav>
   </header>
   <main id="main" tabindex="-1">
   <section class="workspace" aria-label="Clip creator">
   <div class="intro">
     <p class="eyebrow">X / Twitter video downloader</p>
-    <h1>Turn posts into <span>shareable clips.</span></h1>
+    <h1>Turn X posts into <span>shareable clips.</span></h1>
     <p class="tagline">Keep the text. Keep the video. Create a ready-to-share MP4 in your browser.</p>
     <p class="intro-note">Free to use. No account needed.</p>
     <details id="generationHint" class="generation-hint" hidden>
@@ -330,17 +334,23 @@
   </div>
   </section>
 
-  <section class="site-info" aria-label="About ClipTweet">
+  <section class="site-info" aria-label="ClipTweet information">
     <div class="guide-grid">
-    <div class="about-block">
-    <h2>Download Twitter videos with the post text</h2>
-    <p>ClipTweet turns a public X (Twitter) post into an MP4 with its text above the video. It is a free Twitter video downloader for making a clip that keeps the post's context, rather than a download of the unchanged source video. No account or installation is required.</p>
-    </div>
-    <div class="how-block">
-    <h2 id="how-it-works">How to download an X video as an MP4</h2>
-    <ol><li>Copy the link to a public X or Twitter post containing a video.</li><li>Paste it above and select Generate Clip.</li><li>Preview your clip and select Download MP4.</li></ol>
-    <p>ClipTweet processes the video in your browser. Keep this tab open until the clip is ready.</p>
-    </div>
+    <section class="about-block" aria-labelledby="about">
+    <h2 id="about">About ClipTweet</h2>
+    <p>ClipTweet is an independent web tool for turning supported public X posts with video or animated GIFs into MP4 clips. It keeps the post's text with the media, so the clip carries its context.</p>
+    <p>Standard places text above the video and offers optional personalization and ClipTweet branding. Reel places text over the video. The aim is a simple flow: paste a link, choose a layout, create a clip.</p>
+    <section class="contact-block" aria-labelledby="contact">
+    <h3 id="contact">Contact ClipTweet</h3>
+    <p>For bug reports, questions or suggestions, <a href="https://github.com/cliptweet/cliptweet.github.io/issues">contact the project on GitHub</a>. Posting requires a GitHub account. Issues are public; leave out private information.</p>
+    </section>
+    </section>
+    <section class="how-block" aria-labelledby="how-it-works">
+    <h2 id="how-it-works">How ClipTweet works</h2>
+    <ol><li>Paste a supported X post link and choose Standard or Reel.</li><li>Select Generate Clip. ClipTweet retrieves the post text and media information needed for your clip.</li><li>Your browser creates the MP4. Preview it, then download.</li></ol>
+    <p>The final video is created on your own device, directly in your browser. Keep this tab open until it is ready.</p>
+    <p>The post link goes to ClipTweet's API for lookup; your browser then downloads the video from X. See <a href="#privacy">Privacy</a> for details about these connections.</p>
+    </section>
     </div>
     <div class="faq-section">
     <h2 id="faq">Frequently asked questions</h2>
@@ -367,7 +377,7 @@
     </div>
   </section>
   </main>
-  <footer class="site-footer"><span translate="no">ClipTweet</span><p>ClipTweet is not affiliated with X / Twitter.</p></footer>
+  <footer class="site-footer"><span translate="no">ClipTweet</span><p>ClipTweet is not affiliated with X / Twitter.</p><nav aria-label="Footer navigation"><a href="#about">About</a><a href="#how-it-works">How it works</a><a href="#contact">Contact</a><a href="#faq">FAQ</a><a href="#terms">Terms</a><a href="#privacy">Privacy</a></nav></footer>
   </div>
   <script src="/config.js"></script>
   <script src="/app.js"></script>
