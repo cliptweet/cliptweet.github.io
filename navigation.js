@@ -1,5 +1,5 @@
 (() => {
-  const email = 'kendestrozado@gmail.com';
+  const email = 'cliptweetotizera@gmail.com';
   const dialog = document.getElementById('contactDialog');
   const copyButton = document.getElementById('copyEmail');
   const copyStatus = document.getElementById('copyStatus');
