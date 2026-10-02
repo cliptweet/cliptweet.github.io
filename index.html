@@ -167,11 +167,15 @@
     .how-block ol { list-style: none; padding: 0; margin: 0 0 20px; counter-reset: clip-step; }
     .how-block li { display: flex; align-items: baseline; gap: 14px; counter-increment: clip-step; font-size: 14px; margin-bottom: 14px; }
     .how-block li::before { content: counter(clip-step); display: grid; place-items: center; flex: none; width: 26px; height: 26px; border: 1px solid var(--line); border-radius: 7px; color: var(--accent); font-size: 12px; font-weight: 650; }
-    .how-block > p { color: var(--text); font-size: 12px; }
+    .how-copy > p { color: var(--text); font-size: 12px; }
     .contact-block { margin-top: 24px; }
     .contact-block h3 { margin: 0 0 8px; font-size: 16px; font-weight: 600; }
     .contact-block p { margin-bottom: 0; }
     .site-info h2[id], .site-info h3[id] { scroll-margin-top: 24px; }
+    .navigation-copy { position: relative; isolation: isolate; }
+    .navigation-copy::before { content: ""; position: absolute; inset: -10px; z-index: -1; border-radius: 10px; background: rgb(96 185 255 / 10%); box-shadow: 0 0 22px rgb(96 185 255 / 14%); opacity: 0; pointer-events: none; }
+    /* Explicit motion exception for these two user-requested navigation effects only. */
+    .navigation-copy.navigation-arrival::before { animation: navigation-arrival 2000ms ease-in-out; }
     .contact-dialog { width: min(420px, calc(100% - 36px)); max-height: calc(100dvh - 48px); padding: 24px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); color: var(--text); overflow: auto; overscroll-behavior: contain; }
     .contact-dialog::backdrop { background: rgb(6 15 24 / 65%); }
     body:has(.contact-dialog[open]) { overflow: hidden; }
@@ -209,6 +213,7 @@
       .preview-container.active { animation: result-in 180ms ease-out; }
       .generation-hint:not([hidden]) { animation: generation-hint-in 180ms ease-out; }
     }
+    @keyframes navigation-arrival { 0%, 100% { opacity: 0; } 20%, 65% { opacity: 1; } }
     @keyframes processing { to { transform: rotate(360deg); } }
     @keyframes result-in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
     @keyframes generation-hint-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
@@ -350,19 +355,23 @@
   <section class="site-info" aria-label="ClipTweet information">
     <div class="guide-grid">
     <section class="about-block" aria-labelledby="about">
+    <div class="navigation-copy about-copy">
     <h2 id="about">About ClipTweet</h2>
     <p>ClipTweet is an independent web tool for turning supported public X posts with video or animated GIFs into MP4 clips. It keeps the post's text with the media, so the clip carries its context.</p>
     <p>Standard places text above the video and offers optional personalization and ClipTweet branding. Reel places text over the video. The aim is a simple flow: paste a link, choose a layout, create a clip.</p>
+    </div>
     <section class="contact-block" aria-labelledby="contact">
     <h3 id="contact">Contact ClipTweet</h3>
     <p>Questions, feedback or a bug to report? Email <span class="contact-email">kendestrozado@gmail.com</span>. <a href="#contact">Open contact options</a> to copy the address or send an email.</p>
     </section>
     </section>
     <section class="how-block" aria-labelledby="how-it-works">
+    <div class="navigation-copy how-copy">
     <h2 id="how-it-works">How ClipTweet works</h2>
     <ol><li>Paste a supported X post link and choose Standard or Reel.</li><li>Select Generate Clip. ClipTweet retrieves the post text and media information needed for your clip.</li><li>Your browser creates the MP4. Preview it, then download.</li></ol>
     <p>The final video is created on your own device, directly in your browser. Keep this tab open until it is ready.</p>
     <p>The post link goes to ClipTweet's API for lookup; your browser then downloads the video from X. See <a href="#privacy">Privacy</a> for details about these connections.</p>
+    </div>
     </section>
     </div>
     <div class="faq-section">
@@ -401,7 +410,7 @@
   </div>
   <script src="/config.js"></script>
   <script src="/app.js"></script>
-  <script src="/navigation.js"></script>
+  <script src="/navigation.js?v=20261002-arrival-2"></script>
 
 </body>
 </html>

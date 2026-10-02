@@ -3,18 +3,14 @@
   const dialog = document.getElementById('contactDialog');
   const copyButton = document.getElementById('copyEmail');
   const copyStatus = document.getElementById('copyStatus');
-  const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
   let contactTrigger;
   let copyTimer;
   let scrollFrame = null;
   let highlightTimer;
   let highlightedSection;
-  let highlights = [];
 
   function clearHighlight() {
     clearTimeout(highlightTimer);
-    highlights.forEach(animation => animation.cancel());
-    highlights = [];
     highlightedSection?.classList.remove('navigation-arrival');
     highlightedSection = null;
   }
@@ -26,15 +22,11 @@
 
   function arrive(heading) {
     heading.focus({ preventScroll: true });
-    if (reducedMotion.matches) return;
-    const section = heading.closest('section');
+    const section = heading.closest('.navigation-copy');
+    // Flush removal so another click restarts the CSS animation, even at the destination.
+    void section.offsetWidth;
     section.classList.add('navigation-arrival');
     highlightedSection = section;
-    highlights = [...section.querySelectorAll(':scope > h2, :scope > p, :scope > ol')].map(content => content.animate([
-      { filter: 'brightness(1)', textShadow: '0 0 10px rgb(96 185 255 / 0%)' },
-      { filter: 'brightness(1.12)', textShadow: '0 0 10px rgb(96 185 255 / 20%)', offset: 0.35 },
-      { filter: 'brightness(1)', textShadow: '0 0 10px rgb(96 185 255 / 0%)' }
-    ], { duration: 2000, easing: 'ease-in-out' }));
     highlightTimer = setTimeout(clearHighlight, 2000);
   }
 
@@ -46,15 +38,18 @@
     if (!heading) return;
     heading.tabIndex = -1;
     const start = scrollY;
+    const header = document.querySelector('.site-header');
+    const fixedHeader = ['fixed', 'sticky'].includes(getComputedStyle(header).position) ? header.getBoundingClientRect().bottom : 0;
+    const margin = Math.max(parseFloat(getComputedStyle(heading).scrollMarginTop), fixedHeader + 24);
     const target = Math.max(0, Math.min(document.documentElement.scrollHeight - innerHeight,
-      start + heading.getBoundingClientRect().top - parseFloat(getComputedStyle(heading).scrollMarginTop)));
+      start + heading.getBoundingClientRect().top - margin));
     const distance = target - start;
-    if (reducedMotion.matches || Math.abs(distance) < 1) {
+    if (Math.abs(distance) < 1) {
       scrollTo({ top: target, behavior: 'instant' });
       arrive(heading);
       return;
     }
-    const duration = Math.min(1100, 500 + Math.abs(distance) * 0.25);
+    const duration = Math.min(1000, 550 + Math.abs(distance) * 0.3);
     const started = performance.now();
     function step(now) {
       const progress = Math.min(1, (now - started) / duration);
@@ -74,10 +69,6 @@
   addEventListener('touchstart', cancelScroll, { passive: true });
   addEventListener('keydown', event => {
     if (['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' '].includes(event.key)) cancelScroll();
-  });
-  reducedMotion.addEventListener('change', () => {
-    if (scrollFrame !== null) navigate(location.hash);
-    else clearHighlight();
   });
   document.querySelectorAll('a[href="#about"], a[href="#how-it-works"], a[href="#contact"]').forEach(link => {
     if (link.hash === '#contact') {
