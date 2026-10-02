@@ -172,8 +172,6 @@
     .contact-block h3 { margin: 0 0 8px; font-size: 16px; font-weight: 600; }
     .contact-block p { margin-bottom: 0; }
     .site-info h2[id], .site-info h3[id] { scroll-margin-top: 24px; }
-    .about-block, .how-block { position: relative; }
-    .navigation-arrival::before { content: ""; position: absolute; inset: -12px; border: 1px solid rgb(96 185 255 / 40%); border-radius: 12px; background: rgb(96 185 255 / 5%); pointer-events: none; opacity: 0; animation: navigation-arrival 1600ms ease-in-out; }
     .contact-dialog { width: min(420px, calc(100% - 36px)); max-height: calc(100dvh - 48px); padding: 24px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); color: var(--text); overflow: auto; overscroll-behavior: contain; }
     .contact-dialog::backdrop { background: rgb(6 15 24 / 65%); }
     body:has(.contact-dialog[open]) { overflow: hidden; }
@@ -211,8 +209,6 @@
       .preview-container.active { animation: result-in 180ms ease-out; }
       .generation-hint:not([hidden]) { animation: generation-hint-in 180ms ease-out; }
     }
-    @media (prefers-reduced-motion: reduce) { .navigation-arrival::before { animation: none; } }
-    @keyframes navigation-arrival { 0%, 100% { opacity: 0; } 20%, 55% { opacity: 1; } }
     @keyframes processing { to { transform: rotate(360deg); } }
     @keyframes result-in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
     @keyframes generation-hint-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
